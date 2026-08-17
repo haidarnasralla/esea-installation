@@ -11,12 +11,16 @@
 
     body {
       font-family: system-ui, -apple-system, sans-serif;
-      max-width: 900px;
-      margin: 0 auto;
+      margin: 0;
       padding: 2rem;
       background: #1a1a1a;
       color: #e0e0e0;
       min-height: 100vh;
+    }
+
+    header {
+      max-width: 1400px;
+      margin: 0 auto 1.5rem;
     }
 
     h1 {
@@ -26,13 +30,34 @@
 
     .subtitle {
       color: #888;
-      margin-bottom: 2rem;
+      margin: 0;
+    }
+
+    .main-container {
+      display: flex;
+      gap: 2rem;
+      max-width: 1400px;
+      margin: 0 auto;
+    }
+
+    .left-panel, .right-panel {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .panel-label {
+      font-size: 0.85rem;
+      color: #888;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-bottom: 0.5rem;
     }
 
     .controls {
       display: flex;
       gap: 2rem;
-      margin-bottom: 1.5rem;
+      margin-bottom: 1rem;
       flex-wrap: wrap;
       align-items: flex-end;
     }
@@ -77,7 +102,7 @@
     }
 
     input[type="range"] {
-      width: 200px;
+      width: 150px;
       height: 6px;
       -webkit-appearance: none;
       background: #2a2a2a;
@@ -108,7 +133,8 @@
 
     textarea {
       width: 100%;
-      height: 150px;
+      flex: 1;
+      min-height: 400px;
       padding: 1rem;
       border: 1px solid #333;
       border-radius: 8px;
@@ -116,8 +142,7 @@
       color: #e0e0e0;
       font-family: inherit;
       font-size: 0.95rem;
-      resize: vertical;
-      margin-bottom: 1rem;
+      resize: none;
     }
 
     textarea:focus {
@@ -134,8 +159,9 @@
       border: 1px solid #333;
       border-radius: 8px;
       padding: 1.5rem;
-      min-height: 200px;
-      margin-bottom: 1rem;
+      flex: 1;
+      min-height: 400px;
+      overflow-y: auto;
     }
 
     #output {
@@ -164,6 +190,7 @@
     .buttons {
       display: flex;
       gap: 1rem;
+      margin-top: 1rem;
     }
 
     button.action {
@@ -198,50 +225,70 @@
       color: #666;
       margin-top: 1rem;
     }
+
+    @media (max-width: 900px) {
+      .main-container {
+        flex-direction: column;
+      }
+      
+      textarea, .output-container {
+        min-height: 250px;
+      }
+    }
   </style>
 </head>
 <body>
-  <h1>Markov Chain Generator</h1>
-  <p class="subtitle">Paste text, adjust the dials, watch it type.</p>
+  <header>
+    <h1>Markov Chain Generator</h1>
+    <p class="subtitle">Paste text, adjust the dials, watch it type.</p>
+  </header>
 
-  <textarea id="corpus" placeholder="Paste your corpus here..."></textarea>
-
-  <div class="controls">
-    <div class="control-group">
-      <label>Mode</label>
-      <div class="mode-toggle">
-        <button id="mode-word" class="active">Word</button>
-        <button id="mode-char">Char</button>
-      </div>
+  <div class="main-container">
+    <div class="left-panel">
+      <div class="panel-label">Corpus</div>
+      <textarea id="corpus" placeholder="Paste your corpus here..."></textarea>
     </div>
 
-    <div class="control-group">
-      <label>Order</label>
-      <div class="slider-row">
-        <input type="range" id="order" min="1" max="10" value="3">
-        <span class="slider-value" id="order-value">3</span>
+    <div class="right-panel">
+      <div class="controls">
+        <div class="control-group">
+          <label>Mode</label>
+          <div class="mode-toggle">
+            <button id="mode-word" class="active">Word</button>
+            <button id="mode-char">Char</button>
+          </div>
+        </div>
+
+        <div class="control-group">
+          <label>Order</label>
+          <div class="slider-row">
+            <input type="range" id="order" min="1" max="10" value="3">
+            <span class="slider-value" id="order-value">3</span>
+          </div>
+        </div>
+
+        <div class="control-group">
+          <label>Speed</label>
+          <div class="slider-row">
+            <input type="range" id="speed" min="1" max="100" value="50">
+          </div>
+        </div>
+
+        <div class="buttons">
+          <button class="action primary" id="start">Start</button>
+          <button class="action secondary" id="stop">Stop</button>
+          <button class="action secondary" id="clear">Clear</button>
+        </div>
       </div>
-    </div>
 
-    <div class="control-group">
-      <label>Speed</label>
-      <div class="slider-row">
-        <input type="range" id="speed" min="1" max="100" value="50">
+      <div class="panel-label">Output</div>
+      <div class="output-container">
+        <div id="output"></div><span class="cursor" id="cursor"></span>
       </div>
+
+      <div class="status" id="status"></div>
     </div>
   </div>
-
-  <div class="buttons">
-    <button class="action primary" id="start">Start</button>
-    <button class="action secondary" id="stop">Stop</button>
-    <button class="action secondary" id="clear">Clear</button>
-  </div>
-
-  <div class="output-container">
-    <div id="output"></div><span class="cursor" id="cursor"></span>
-  </div>
-
-  <div class="status" id="status"></div>
 
   <script>
     // Inline MarkovGenerator (adapted for browser)
