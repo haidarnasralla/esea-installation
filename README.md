@@ -4,8 +4,14 @@ A flexible n-gram text generator in JavaScript with adjustable tokenisation (wor
 
 ## Usage
 
+### Web Interface
+
+Open `markov/markov.html` in your browser. Paste text, adjust the dials, watch it type.
+
+### Programmatic
+
 ```javascript
-const MarkovGenerator = require('./markov-generator.js');
+const MarkovGenerator = require('./markov/markov-generator.js');
 
 const generator = new MarkovGenerator();
 generator.train('Your corpus text here...');
@@ -16,18 +22,6 @@ generator.generate({ length: 50, mode: 'word', order: 3 });
 // Character mode, order 5
 generator.generate({ length: 200, mode: 'char', order: 5 });
 ```
-
-### Interactive Mode
-
-```bash
-node markov-interactive.js
-```
-
-Controls:
-- `m` — toggle word/char mode
-- `+` / `-` — adjust order up/down
-- `1`-`10` — jump to specific order
-- `Enter` — regenerate
 
 ## Controls
 
@@ -107,7 +101,12 @@ None support character mode out of the box. This implementation provides both.
 
 ## Files
 
-- `markov-generator.js` — main implementation
-- `markov-interactive.js` — CLI with dial controls
-- `markov-demo.js` — quick test/demo
-- `presentation.md` — explanation of tokenisation
+```
+├── README.md
+├── markov/
+│   ├── markov.html           — web UI with streaming output
+│   ├── markov-generator.js  — main implementation
+│   └── markov-demo.js       — quick test/demo
+└── presentation/
+    └── presentation.md      — explanation of tokenisation
+```

@@ -1,0 +1,489 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Markov Chain Generator</title>
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      max-width: 900px;
+      margin: 0 auto;
+      padding: 2rem;
+      background: #1a1a1a;
+      color: #e0e0e0;
+      min-height: 100vh;
+    }
+
+    h1 {
+      margin-bottom: 0.5rem;
+      font-weight: 500;
+    }
+
+    .subtitle {
+      color: #888;
+      margin-bottom: 2rem;
+    }
+
+    .controls {
+      display: flex;
+      gap: 2rem;
+      margin-bottom: 1.5rem;
+      flex-wrap: wrap;
+      align-items: flex-end;
+    }
+
+    .control-group {
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+    }
+
+    label {
+      font-size: 0.85rem;
+      color: #888;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .mode-toggle {
+      display: flex;
+      background: #2a2a2a;
+      border-radius: 6px;
+      overflow: hidden;
+    }
+
+    .mode-toggle button {
+      padding: 0.6rem 1.2rem;
+      border: none;
+      background: transparent;
+      color: #888;
+      cursor: pointer;
+      font-size: 1rem;
+      transition: all 0.15s;
+    }
+
+    .mode-toggle button.active {
+      background: #3a3a3a;
+      color: #fff;
+    }
+
+    .mode-toggle button:hover:not(.active) {
+      color: #bbb;
+    }
+
+    input[type="range"] {
+      width: 200px;
+      height: 6px;
+      -webkit-appearance: none;
+      background: #2a2a2a;
+      border-radius: 3px;
+      outline: none;
+    }
+
+    input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 18px;
+      height: 18px;
+      background: #fff;
+      border-radius: 50%;
+      cursor: pointer;
+    }
+
+    .slider-value {
+      font-size: 1.5rem;
+      font-weight: 600;
+      min-width: 2rem;
+    }
+
+    .slider-row {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+    }
+
+    textarea {
+      width: 100%;
+      height: 150px;
+      padding: 1rem;
+      border: 1px solid #333;
+      border-radius: 8px;
+      background: #222;
+      color: #e0e0e0;
+      font-family: inherit;
+      font-size: 0.95rem;
+      resize: vertical;
+      margin-bottom: 1rem;
+    }
+
+    textarea:focus {
+      outline: none;
+      border-color: #555;
+    }
+
+    textarea::placeholder {
+      color: #555;
+    }
+
+    .output-container {
+      background: #222;
+      border: 1px solid #333;
+      border-radius: 8px;
+      padding: 1.5rem;
+      min-height: 200px;
+      margin-bottom: 1rem;
+    }
+
+    #output {
+      font-family: 'Georgia', serif;
+      font-size: 1.2rem;
+      line-height: 1.7;
+      white-space: pre-wrap;
+      word-wrap: break-word;
+    }
+
+    .cursor {
+      display: inline-block;
+      width: 2px;
+      height: 1.2em;
+      background: #fff;
+      margin-left: 2px;
+      animation: blink 0.8s infinite;
+      vertical-align: text-bottom;
+    }
+
+    @keyframes blink {
+      0%, 50% { opacity: 1; }
+      51%, 100% { opacity: 0; }
+    }
+
+    .buttons {
+      display: flex;
+      gap: 1rem;
+    }
+
+    button.action {
+      padding: 0.7rem 1.5rem;
+      border: none;
+      border-radius: 6px;
+      font-size: 1rem;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+
+    button.primary {
+      background: #fff;
+      color: #1a1a1a;
+    }
+
+    button.primary:hover {
+      background: #ddd;
+    }
+
+    button.secondary {
+      background: #333;
+      color: #e0e0e0;
+    }
+
+    button.secondary:hover {
+      background: #444;
+    }
+
+    .status {
+      font-size: 0.85rem;
+      color: #666;
+      margin-top: 1rem;
+    }
+  </style>
+</head>
+<body>
+  <h1>Markov Chain Generator</h1>
+  <p class="subtitle">Paste text, adjust the dials, watch it type.</p>
+
+  <textarea id="corpus" placeholder="Paste your corpus here..."></textarea>
+
+  <div class="controls">
+    <div class="control-group">
+      <label>Mode</label>
+      <div class="mode-toggle">
+        <button id="mode-word" class="active">Word</button>
+        <button id="mode-char">Char</button>
+      </div>
+    </div>
+
+    <div class="control-group">
+      <label>Order</label>
+      <div class="slider-row">
+        <input type="range" id="order" min="1" max="10" value="3">
+        <span class="slider-value" id="order-value">3</span>
+      </div>
+    </div>
+
+    <div class="control-group">
+      <label>Speed</label>
+      <div class="slider-row">
+        <input type="range" id="speed" min="1" max="100" value="50">
+      </div>
+    </div>
+  </div>
+
+  <div class="buttons">
+    <button class="action primary" id="start">Start</button>
+    <button class="action secondary" id="stop">Stop</button>
+    <button class="action secondary" id="clear">Clear</button>
+  </div>
+
+  <div class="output-container">
+    <div id="output"></div><span class="cursor" id="cursor"></span>
+  </div>
+
+  <div class="status" id="status"></div>
+
+  <script>
+    // Inline MarkovGenerator (adapted for browser)
+    class MarkovGenerator {
+      constructor() {
+        this.corpus = '';
+        this.wordTokens = [];
+        this.charTokens = [];
+        this.modelCache = new Map();
+      }
+
+      train(data) {
+        this.corpus = this._normalizeCorpus(data);
+        this.wordTokens = this._tokenize(this.corpus, 'word');
+        this.charTokens = this._tokenize(this.corpus, 'char');
+        this.modelCache.clear();
+      }
+
+      *generateStream(mode, order) {
+        if (!this.corpus) return;
+        
+        order = Math.max(1, Math.min(10, order));
+        const tokens = mode === 'word' ? this.wordTokens : this.charTokens;
+        
+        if (tokens.length < order) return;
+
+        const model = this._getOrBuildModel(mode, order);
+        let current = this._randomStart(tokens, order);
+
+        // Yield initial tokens
+        for (const token of current) {
+          yield { token, mode };
+        }
+
+        while (true) {
+          const key = current.join('\x00');
+          const candidates = model.get(key);
+
+          if (!candidates || candidates.length === 0) {
+            current = this._randomStart(tokens, order);
+            continue;
+          }
+
+          const next = candidates[Math.floor(Math.random() * candidates.length)];
+          yield { token: next, mode };
+          current = [...current.slice(1), next];
+        }
+      }
+
+      _getOrBuildModel(mode, order) {
+        const cacheKey = `${mode}-${order}`;
+        if (this.modelCache.has(cacheKey)) {
+          return this.modelCache.get(cacheKey);
+        }
+        const tokens = mode === 'word' ? this.wordTokens : this.charTokens;
+        const model = this._buildModel(tokens, order);
+        this.modelCache.set(cacheKey, model);
+        return model;
+      }
+
+      _buildModel(tokens, order) {
+        const model = new Map();
+        for (let i = 0; i <= tokens.length - order - 1; i++) {
+          const gram = tokens.slice(i, i + order);
+          const next = tokens[i + order];
+          const key = gram.join('\x00');
+          if (!model.has(key)) {
+            model.set(key, []);
+          }
+          model.get(key).push(next);
+        }
+        return model;
+      }
+
+      _randomStart(tokens, order) {
+        const startIndex = Math.floor(Math.random() * (tokens.length - order));
+        return tokens.slice(startIndex, startIndex + order);
+      }
+
+      _tokenize(text, mode) {
+        if (mode === 'word') {
+          return text.split(/\s+/).filter(w => w.length > 0);
+        } else {
+          return Array.from(text);
+        }
+      }
+
+      _normalizeCorpus(data) {
+        if (typeof data === 'string') return data;
+        if (Array.isArray(data) && typeof data[0] === 'string') {
+          return data.join(' ');
+        }
+        if (Array.isArray(data) && typeof data[0] === 'object') {
+          return data.map(item => item.text || item.content || item.body || '').join(' ');
+        }
+        if (typeof data === 'object' && !Array.isArray(data)) {
+          const arr = data.documents || data.items || data.data || data.texts;
+          if (arr) return this._normalizeCorpus(arr);
+          if (data.text || data.content || data.body) {
+            return data.text || data.content || data.body;
+          }
+        }
+        return '';
+      }
+    }
+
+    // UI
+    const generator = new MarkovGenerator();
+    let streamGenerator = null;
+    let isRunning = false;
+    let timeoutId = null;
+
+    const corpusEl = document.getElementById('corpus');
+    const outputEl = document.getElementById('output');
+    const cursorEl = document.getElementById('cursor');
+    const statusEl = document.getElementById('status');
+    const orderSlider = document.getElementById('order');
+    const orderValue = document.getElementById('order-value');
+    const speedSlider = document.getElementById('speed');
+    const modeWordBtn = document.getElementById('mode-word');
+    const modeCharBtn = document.getElementById('mode-char');
+    const startBtn = document.getElementById('start');
+    const stopBtn = document.getElementById('stop');
+    const clearBtn = document.getElementById('clear');
+
+    let mode = 'word';
+    let order = 3;
+
+    // Mode toggle
+    modeWordBtn.addEventListener('click', () => {
+      mode = 'word';
+      modeWordBtn.classList.add('active');
+      modeCharBtn.classList.remove('active');
+      updateStatus();
+    });
+
+    modeCharBtn.addEventListener('click', () => {
+      mode = 'char';
+      modeCharBtn.classList.add('active');
+      modeWordBtn.classList.remove('active');
+      updateStatus();
+    });
+
+    // Order slider
+    orderSlider.addEventListener('input', () => {
+      order = parseInt(orderSlider.value);
+      orderValue.textContent = order;
+      updateStatus();
+    });
+
+    // Buttons
+    startBtn.addEventListener('click', start);
+    stopBtn.addEventListener('click', stop);
+    clearBtn.addEventListener('click', () => {
+      stop();
+      outputEl.textContent = '';
+    });
+
+    function getDelay() {
+      // Speed 1 = slow (150ms for word, 80ms for char)
+      // Speed 100 = fast (10ms for word, 5ms for char)
+      const speedVal = parseInt(speedSlider.value);
+      const baseDelay = mode === 'word' ? 150 : 80;
+      const minDelay = mode === 'word' ? 10 : 5;
+      return minDelay + (baseDelay - minDelay) * (1 - speedVal / 100);
+    }
+
+    function start() {
+      const corpus = corpusEl.value.trim();
+      if (!corpus) {
+        statusEl.textContent = 'Please paste a corpus first.';
+        return;
+      }
+
+      generator.train(corpus);
+      
+      if (!isRunning) {
+        outputEl.textContent = '';
+      }
+      
+      isRunning = true;
+      cursorEl.style.display = 'inline-block';
+      streamGenerator = generator.generateStream(mode, order);
+      tick();
+    }
+
+    function stop() {
+      isRunning = false;
+      cursorEl.style.display = 'none';
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+        timeoutId = null;
+      }
+    }
+
+    function tick() {
+      if (!isRunning) return;
+
+      // Re-create generator if mode/order changed
+      const currentMode = mode;
+      const currentOrder = order;
+
+      // Get next token with current settings
+      const tempGen = generator.generateStream(currentMode, currentOrder);
+      
+      // We need to maintain context, so let's use a simpler approach:
+      // Just generate one token at a time with current settings
+      const result = streamGenerator.next();
+      
+      if (result.done) {
+        // Restart with current settings
+        streamGenerator = generator.generateStream(mode, order);
+        timeoutId = setTimeout(tick, getDelay());
+        return;
+      }
+
+      const { token, mode: tokenMode } = result.value;
+      
+      // Add appropriate spacing
+      if (tokenMode === 'word' && outputEl.textContent.length > 0) {
+        outputEl.textContent += ' ';
+      }
+      outputEl.textContent += token;
+
+      // Scroll to bottom if needed
+      outputEl.scrollIntoView({ behavior: 'smooth', block: 'end' });
+
+      // Check if settings changed — if so, create new generator
+      if (mode !== tokenMode) {
+        streamGenerator = generator.generateStream(mode, order);
+      }
+
+      updateStatus();
+      timeoutId = setTimeout(tick, getDelay());
+    }
+
+    function updateStatus() {
+      const tokens = mode === 'word' ? generator.wordTokens.length : generator.charTokens.length;
+      if (tokens > 0) {
+        statusEl.textContent = `${mode} mode, order ${order}, ${tokens} tokens`;
+      }
+    }
+  </script>
+</body>
+</html>
