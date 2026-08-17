@@ -9,39 +9,42 @@ Build a **flexible Markov chain text generator in JavaScript** that can:
 
 ---
 
-## The Dial: N-gram Order + Tokenization Mode
+## The Controls: Mode + Order
 
-The "dial" is actually **two parameters** that work together:
+Two independent parameters:
 
-| Dial Position | Mode | Order | Output Character |
-|---------------|------|-------|------------------|
-| 10 (max coherence) | word | 5 | Nearly copies source, very constrained |
-| 8 | word | 3 | Coherent sentences, recognizable style |
-| 6 | word | 2 | Readable but novel, standard Markov |
-| 4 | word | 1 | Grammatically loose, word salad |
-| 3 | char | 10 | Word-like, mostly real words emerge |
-| 2 | char | 5 | Fragments, some recognizable syllables |
-| 1 | char | 3 | Mostly gibberish |
-| 0 (max chaos) | char | 1 | Pure random characters from corpus |
+### Mode (toggle)
+- **`word`** — tokenize by whitespace, each token is a word
+- **`char`** — tokenize by character (using `Array.from()` for Unicode safety)
 
-### Why Two Parameters?
+### Order (1-10 slider)
+The n-gram size. Applies to whichever mode is active.
 
-You can't smoothly interpolate between "3 words" and "4 characters" with a single model — they're different tokenizations. A word is a variable number of characters, so there's no mathematical mapping.
+| Order | Word Mode | Char Mode |
+|-------|-----------|-----------|
+| 10 | Nearly copies source | Real words, very constrained |
+| 5 | Coherent, recognizable style | Word-like fragments |
+| 3 | Readable but novel | Syllable-ish chunks |
+| 2 | Standard Markov output | Recognizable letter patterns |
+| 1 | Word salad | Random characters |
 
-**Solution**: Treat the dial as a **lookup table** that maps a 0-10 (or 0-100) value to a `(mode, order)` pair. The user sees one dial; internally it switches modes at a threshold.
+### API
 
 ```javascript
-function dialToParams(dial) {
-  // dial: 0-100
-  if (dial >= 50) {
-    // Word mode: dial 50-100 maps to order 1-5
-    return { mode: 'word', order: Math.ceil((dial - 50) / 10) };
-  } else {
-    // Char mode: dial 0-49 maps to order 1-10
-    return { mode: 'char', order: Math.ceil(dial / 5) || 1 };
-  }
-}
+generator.generate({
+  length: 100,
+  mode: 'word',  // or 'char'
+  order: 3
+})
 ```
+
+### UI Mapping
+
+Two controls:
+- **Toggle/Switch**: Word ↔ Char
+- **Slider**: Order 1-10
+
+No artificial thresholds or lookup tables — the user controls both dimensions directly.
 
 ---
 
@@ -52,27 +55,23 @@ function dialToParams(dial) {
 │                     MarkovGenerator                         │
 ├─────────────────────────────────────────────────────────────┤
 │  train(corpus)                                              │
-│    → stores raw corpus for on-demand model building         │
+│    → stores raw corpus, tokenizes both ways                 │
 │                                                             │
-│  generate({ length, dial = 75 })                            │
-│    → converts dial to (mode, order)                         │
-│    → builds/caches model for that config                    │
+│  generate({ length, mode, order })                          │
+│    → builds/caches model for (mode, order) combo            │
 │    → generates output                                       │
-│                                                             │
-│  setDial(value) / getDial()                                 │
-│    → convenience for real-time adjustment                   │
 └─────────────────────────────────────────────────────────────┘
 ```
 
 ### Model Caching
 
-Since the user might sweep the dial in real-time, rebuild on every change is expensive. Options:
+Up to 20 possible models (2 modes × 10 orders). Options:
 
-1. **Pre-build all models** at training time (memory heavy but instant switching)
-2. **LRU cache** of recently-used (mode, order) combinations
-3. **Lazy build** on first use, then cache
+1. **Pre-build all** at training time — fine for small corpora
+2. **Lazy build + cache** — build on first use, keep in memory
+3. **LRU cache** — if memory constrained, evict least-used
 
-For a small corpus, option 1 is fine. For large corpora, option 2/3.
+For most use cases, option 2 is the sweet spot.
 
 ---
 
