@@ -41,6 +41,44 @@ class MarkovGenerator {
   }
 
   /**
+   * Generate text as a stream (generator function).
+   * Yields one token at a time, runs indefinitely until stopped.
+   * @param {string} mode - 'word' or 'char'
+   * @param {number} order - N-gram size (1-10)
+   * @yields {{ token: string, mode: string }}
+   */
+  *generateStream(mode = 'word', order = 2) {
+    if (!this.corpus) return;
+    
+    order = Math.max(1, Math.min(10, order));
+    const tokens = mode === 'word' ? this.wordTokens : this.charTokens;
+    
+    if (tokens.length < order) return;
+
+    const model = this._getOrBuildModel(mode, order);
+    let current = this._randomStart(tokens, order);
+
+    // Yield initial tokens
+    for (const token of current) {
+      yield { token, mode };
+    }
+
+    while (true) {
+      const key = current.join('\x00');
+      const candidates = model.get(key);
+
+      if (!candidates || candidates.length === 0) {
+        current = this._randomStart(tokens, order);
+        continue;
+      }
+
+      const next = candidates[Math.floor(Math.random() * candidates.length)];
+      yield { token: next, mode };
+      current = [...current.slice(1), next];
+    }
+  }
+
+  /**
    * Generate text using the Markov chain.
    * @param {object} options
    * @param {number} options.length - Number of tokens to generate
@@ -235,7 +273,8 @@ class MarkovGenerator {
   }
 }
 
-// Export for Node.js / ES modules
+// Export for Node.js (CommonJS) and browser (ES modules)
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = MarkovGenerator;
 }
+export default MarkovGenerator;
