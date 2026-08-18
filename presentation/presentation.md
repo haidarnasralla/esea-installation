@@ -43,6 +43,44 @@ Same algorithm, same corpus — but different granularity of "pieces" to work wi
 
 ---
 
+# How a Markov Chain Works
+
+## Training
+
+Scan through the text and record what comes after each n-gram. Don't calculate percentages — just keep a list of observed "next tokens" (with duplicates).
+
+Example with order 2, word mode:
+
+```
+"the cat sat on the mat"
+
+("the", "cat") → ["sat"]          ← "sat" followed "the cat"
+("cat", "sat") → ["on"]           ← "on" followed "cat sat"
+("sat", "on")  → ["the"]
+("on", "the")  → ["mat"]
+("the", "mat") → [end]
+```
+
+If "the cat" appeared twice with different followers:
+
+```
+"the cat sat... the cat ran"
+
+("the", "cat") → ["sat", "ran"]   ← both observed, both recorded
+```
+
+## Generation
+
+Pick a starting n-gram, then randomly grab one item from its list of "next tokens". That becomes your output. Slide the window forward, repeat.
+
+## Why duplicates = probability
+
+The statistics emerge automatically: if "sat" follows "the cat" 80% of the time in the corpus, there'll be 4× as many "sat" entries in that list as "ran". A random pick naturally hits "sat" more often.
+
+No probability calculation needed — **frequency is probability**.
+
+---
+
 ## Definitions from the literature
 
 > "Given a character sequence and a defined document unit, tokenization is the task of chopping it up into pieces, called tokens, perhaps at the same time throwing away certain characters, such as punctuation."

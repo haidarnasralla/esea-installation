@@ -24,13 +24,8 @@
     }
 
     h1 {
-      margin-bottom: 0.5rem;
+      margin-bottom: 1rem;
       font-weight: 500;
-    }
-
-    .subtitle {
-      color: #888;
-      margin: 0;
     }
 
     .main-container {
@@ -54,12 +49,20 @@
       margin-bottom: 0.5rem;
     }
 
+    .dashboard {
+      background: #222;
+      border: 1px solid #333;
+      border-radius: 8px;
+      padding: 1.5rem;
+      margin-bottom: 1.5rem;
+    }
+
     .controls {
       display: flex;
       gap: 2rem;
-      margin-bottom: 1rem;
       flex-wrap: wrap;
-      align-items: flex-end;
+      align-items: center;
+      justify-content: space-between;
     }
 
     .control-group {
@@ -159,9 +162,17 @@
       border: 1px solid #333;
       border-radius: 8px;
       padding: 1.5rem;
-      flex: 1;
-      min-height: 400px;
+      height: 400px;
       overflow-y: auto;
+      display: flex;
+      flex-direction: column-reverse;
+    }
+
+    .output-wrapper {
+      display: flex;
+      flex-direction: column;
+      justify-content: flex-end;
+      min-height: 100%;
     }
 
     #output {
@@ -189,8 +200,8 @@
 
     .buttons {
       display: flex;
-      gap: 1rem;
-      margin-top: 1rem;
+      gap: 0.75rem;
+      align-items: center;
     }
 
     button.action {
@@ -240,16 +251,8 @@
 <body>
   <header>
     <h1>Markov Chain Generator</h1>
-    <p class="subtitle">Paste text, adjust the dials, watch it type.</p>
-  </header>
 
-  <div class="main-container">
-    <div class="left-panel">
-      <div class="panel-label">Corpus</div>
-      <textarea id="corpus" placeholder="Paste your corpus here..."></textarea>
-    </div>
-
-    <div class="right-panel">
+    <div class="dashboard">
       <div class="controls">
         <div class="control-group">
           <label>Mode</label>
@@ -280,10 +283,21 @@
           <button class="action secondary" id="clear">Clear</button>
         </div>
       </div>
+    </div>
+  </header>
 
+  <div class="main-container">
+    <div class="left-panel">
+      <div class="panel-label">Corpus</div>
+      <textarea id="corpus" placeholder="Paste your corpus here..."></textarea>
+    </div>
+
+    <div class="right-panel">
       <div class="panel-label">Output</div>
-      <div class="output-container">
-        <div id="output"></div><span class="cursor" id="cursor"></span>
+      <div class="output-container" id="output-container">
+        <div class="output-wrapper">
+          <div id="output"></div><span class="cursor" id="cursor"></span>
+        </div>
       </div>
 
       <div class="status" id="status"></div>
@@ -318,7 +332,6 @@
         const model = this._getOrBuildModel(mode, order);
         let current = this._randomStart(tokens, order);
 
-        // Yield initial tokens
         for (const token of current) {
           yield { token, mode };
         }
@@ -416,6 +429,8 @@
 
     let mode = 'word';
     let order = 3;
+    let lastMode = 'word';
+    let lastOrder = 3;
 
     // Mode toggle
     modeWordBtn.addEventListener('click', () => {
@@ -448,10 +463,10 @@
     });
 
     function getDelay() {
-      // Speed 1 = slow (150ms for word, 80ms for char)
+      // Speed 1 = slow (500ms for word, 200ms for char)
       // Speed 100 = fast (10ms for word, 5ms for char)
       const speedVal = parseInt(speedSlider.value);
-      const baseDelay = mode === 'word' ? 150 : 80;
+      const baseDelay = mode === 'word' ? 500 : 200;
       const minDelay = mode === 'word' ? 10 : 5;
       return minDelay + (baseDelay - minDelay) * (1 - speedVal / 100);
     }
@@ -472,6 +487,8 @@
       isRunning = true;
       cursorEl.style.display = 'inline-block';
       streamGenerator = generator.generateStream(mode, order);
+      lastMode = mode;
+      lastOrder = order;
       tick();
     }
 
@@ -487,19 +504,16 @@
     function tick() {
       if (!isRunning) return;
 
-      // Re-create generator if mode/order changed
-      const currentMode = mode;
-      const currentOrder = order;
+      // Check if settings changed — if so, create new generator
+      if (mode !== lastMode || order !== lastOrder) {
+        streamGenerator = generator.generateStream(mode, order);
+        lastMode = mode;
+        lastOrder = order;
+      }
 
-      // Get next token with current settings
-      const tempGen = generator.generateStream(currentMode, currentOrder);
-      
-      // We need to maintain context, so let's use a simpler approach:
-      // Just generate one token at a time with current settings
       const result = streamGenerator.next();
       
       if (result.done) {
-        // Restart with current settings
         streamGenerator = generator.generateStream(mode, order);
         timeoutId = setTimeout(tick, getDelay());
         return;
@@ -507,19 +521,14 @@
 
       const { token, mode: tokenMode } = result.value;
       
-      // Add appropriate spacing
       if (tokenMode === 'word' && outputEl.textContent.length > 0) {
         outputEl.textContent += ' ';
       }
       outputEl.textContent += token;
 
-      // Scroll to bottom if needed
-      outputEl.scrollIntoView({ behavior: 'smooth', block: 'end' });
-
-      // Check if settings changed — if so, create new generator
-      if (mode !== tokenMode) {
-        streamGenerator = generator.generateStream(mode, order);
-      }
+      // Scroll container to bottom
+      const container = document.getElementById('output-container');
+      container.scrollTop = container.scrollHeight;
 
       updateStatus();
       timeoutId = setTimeout(tick, getDelay());
