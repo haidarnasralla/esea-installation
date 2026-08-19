@@ -79,6 +79,69 @@ class MarkovGenerator {
   }
 
   /**
+   * Generate text as a stream with full candidate information for visualization.
+   * Yields the chosen token plus all candidates and their frequencies.
+   * @param {string} mode - 'word' or 'char'
+   * @param {number} order - N-gram size (1-10)
+   * @yields {{ token: string, mode: string, context: string[], candidates: Array<{token: string, count: number, frequency: number}>, isInitial: boolean }}
+   */
+  *generateStreamWithCandidates(mode = 'word', order = 2) {
+    if (!this.corpus) return;
+    
+    order = Math.max(1, Math.min(10, order));
+    const tokens = mode === 'word' ? this.wordTokens : this.charTokens;
+    
+    if (tokens.length < order) return;
+
+    const model = this._getOrBuildModel(mode, order);
+    let current = this._randomStart(tokens, order);
+
+    // Yield initial tokens (no candidates for these - they're the seed)
+    for (const token of current) {
+      yield { token, mode, context: [], candidates: [], isInitial: true };
+    }
+
+    while (true) {
+      const key = current.join('\x00');
+      const candidatesList = model.get(key);
+
+      if (!candidatesList || candidatesList.length === 0) {
+        current = this._randomStart(tokens, order);
+        continue;
+      }
+
+      // Count frequencies of each candidate token
+      const counts = new Map();
+      for (const c of candidatesList) {
+        counts.set(c, (counts.get(c) || 0) + 1);
+      }
+
+      // Convert to array with frequency info
+      const totalCount = candidatesList.length;
+      const candidates = Array.from(counts.entries())
+        .map(([token, count]) => ({
+          token,
+          count,
+          frequency: count / totalCount
+        }))
+        .sort((a, b) => b.count - a.count); // Sort by frequency descending
+
+      // Pick one weighted by frequency (same as original - random from the list)
+      const next = candidatesList[Math.floor(Math.random() * candidatesList.length)];
+      
+      yield { 
+        token: next, 
+        mode, 
+        context: [...current],
+        candidates,
+        isInitial: false
+      };
+      
+      current = [...current.slice(1), next];
+    }
+  }
+
+  /**
    * Generate text using the Markov chain.
    * @param {object} options
    * @param {number} options.length - Number of tokens to generate
