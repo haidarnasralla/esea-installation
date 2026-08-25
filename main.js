@@ -151,9 +151,13 @@ function generateText() {
 }
 
 // --- Poisson Scheduling ---
-function getNextPoissonDelay() {
+function getNextPoissonDelay(timestamp) {
+  // Get LFO-modulated lambda based on current time
+  const timeInSeconds = timestamp / 1000;
+  const lambda = cycle.getLambda(timeInSeconds);
+  
   // Exponential distribution: -ln(U) / λ
-  return -Math.log(Math.random()) / CONFIG.lambda * 1000; // ms
+  return -Math.log(Math.random()) / lambda * 1000; // ms
 }
 
 // --- Collision Detection ---
@@ -305,12 +309,31 @@ function updateUI() {
   document.getElementById('char-active').textContent = state.charModeActive ? 'Yes' : 'No';
   document.getElementById('overlap-tolerance').textContent = `${Math.round(tolerance * 100)}%`;
   
+  // Update glitch effect values
+  document.getElementById('flicker').textContent = `${Math.round(cycle.getFlicker() * 100)}%`;
+  document.getElementById('fade-flicker').textContent = `${Math.round(cycle.getFadeFlicker() * 100)}%`;
+  document.getElementById('inverse-flicker').textContent = `${Math.round(cycle.getInverseFlicker() * 100)}%`;
+  document.getElementById('chromatic').textContent = `${cycle.getChromaticAberration().toFixed(1)}px`;
+  document.getElementById('color-shift').textContent = `${Math.round(cycle.getColorShift() * 100)}%`;
+  document.getElementById('noise').textContent = `${Math.round(cycle.getNoiseOverlay() * 100)}%`;
+  document.getElementById('char-dropout').textContent = `${Math.round(cycle.getCharDropout() * 100)}%`;
+  document.getElementById('ghost').textContent = `${Math.round(cycle.getDuplicateGhost().probability * 100)}%`;
+  document.getElementById('slice').textContent = `${Math.round(cycle.getSliceDisplacement().probability * 100)}%`;
+  document.getElementById('bit-crush').textContent = `${Math.round(cycle.getBitCrush() * 100)}%`;
+  
   // Disable button at final state
   const stepBtn = document.getElementById('step-btn');
   if (cycle.isFinal()) {
     stepBtn.disabled = true;
     stepBtn.textContent = 'Final State Reached';
   }
+}
+
+// Update values that change continuously (LFO-modulated)
+function updateLiveUI(timestamp) {
+  const timeInSeconds = timestamp / 1000;
+  const lambda = cycle.getLambda(timeInSeconds);
+  document.getElementById('lambda').textContent = lambda.toFixed(2);
 }
 
 // --- Step Handler ---
@@ -320,21 +343,45 @@ function handleStep() {
   console.log('Stepped to:', cycle.getState());
 }
 
+// --- Glitch Effect Colors ---
+const GLITCH_COLORS = [
+  'rgba(255, 0, 0, 0.9)',    // red
+  'rgba(0, 255, 255, 0.9)',  // cyan
+  'rgba(255, 0, 255, 0.9)',  // magenta
+  'rgba(0, 255, 0, 0.9)',    // green
+  'rgba(255, 255, 0, 0.9)',  // yellow
+];
+
 // --- Rendering ---
 function updateAndRender(timestamp) {
   const deltaTime = lastTime ? (timestamp - lastTime) / 1000 : 0;
   const deltaTimeMs = deltaTime * 1000;
   lastTime = timestamp;
   
+  // Get current visual effect values
+  const flicker = cycle.getFlicker();
+  const fadeFlicker = cycle.getFadeFlicker();
+  const inverseFlicker = cycle.getInverseFlicker();
+  const chromatic = cycle.getChromaticAberration();
+  const colorShift = cycle.getColorShift();
+  const noiseIntensity = cycle.getNoiseOverlay();
+  const charDropout = cycle.getCharDropout();
+  const ghost = cycle.getDuplicateGhost();
+  const slice = cycle.getSliceDisplacement();
+  const bitCrush = cycle.getBitCrush();
+  
   // Clear canvas
   ctx.fillStyle = 'rgba(0, 0, 0, 1)';
   ctx.fillRect(0, 0, canvas.width, canvas.height);
   
-  // Spawn new snippets via Poisson process
+  // Spawn new snippets via Poisson process (with LFO-modulated lambda)
   if (timestamp >= nextSpawnTime) {
     spawnSnippet();
-    nextSpawnTime = timestamp + getNextPoissonDelay();
+    nextSpawnTime = timestamp + getNextPoissonDelay(timestamp);
   }
+  
+  // Update live UI values
+  updateLiveUI(timestamp);
   
   // Update and render snippets
   for (let i = snippets.length - 1; i >= 0; i--) {
@@ -365,16 +412,128 @@ function updateAndRender(timestamp) {
       }
     }
     
-    // Render visible portion of text
-    const visibleText = s.text.slice(0, s.visibleChars);
+    // Apply full flicker effect (skip rendering entirely)
+    if (Math.random() < flicker) {
+      continue;
+    }
+    
+    // Calculate effective opacity
+    let effectiveOpacity = s.opacity;
+    
+    // Apply fade flicker (partial opacity drop)
+    if (Math.random() < fadeFlicker) {
+      effectiveOpacity *= 0.3 + Math.random() * 0.5; // 30-80% opacity
+    }
+    
+    // Get visible text
+    let visibleText = s.text.slice(0, s.visibleChars);
+    
+    // Apply character dropout
+    if (charDropout > 0) {
+      visibleText = visibleText.split('').map(char => {
+        return Math.random() < charDropout ? ' ' : char;
+      }).join('');
+    }
+    
     ctx.font = `${s.fontSize}px ${s.fontFamily}`;
-    ctx.fillStyle = CONFIG.color.replace(/[\d.]+\)$/, `${s.opacity})`);
-    ctx.fillText(visibleText, s.x, s.y);
+    
+    // Check for inverse flicker
+    const isInverse = Math.random() < inverseFlicker;
+    
+    if (isInverse) {
+      // Draw white background rect, black text
+      const metrics = ctx.measureText(visibleText);
+      const textHeight = s.fontSize * 1.2;
+      ctx.fillStyle = `rgba(255, 255, 255, ${effectiveOpacity})`;
+      ctx.fillRect(s.x - 2, s.y - textHeight + 4, metrics.width + 4, textHeight);
+      ctx.fillStyle = `rgba(0, 0, 0, ${effectiveOpacity})`;
+      ctx.fillText(visibleText, s.x, s.y);
+    } else {
+      // Determine base color
+      let baseColor = CONFIG.color;
+      
+      // Apply color shift
+      if (Math.random() < colorShift) {
+        baseColor = GLITCH_COLORS[Math.floor(Math.random() * GLITCH_COLORS.length)];
+      }
+      
+      // Apply bit crush (posterize to limited colors)
+      if (Math.random() < bitCrush) {
+        const grayLevel = Math.floor(Math.random() * 4) * 85; // 0, 85, 170, 255
+        baseColor = `rgba(${grayLevel}, ${grayLevel}, ${grayLevel}, ${effectiveOpacity})`;
+      }
+      
+      // Apply chromatic aberration (RGB offset copies)
+      if (chromatic > 0) {
+        const offset = chromatic * (0.5 + Math.random() * 0.5);
+        
+        // Red channel (offset left)
+        ctx.fillStyle = `rgba(255, 0, 0, ${effectiveOpacity * 0.5})`;
+        ctx.fillText(visibleText, s.x - offset, s.y);
+        
+        // Blue channel (offset right)
+        ctx.fillStyle = `rgba(0, 100, 255, ${effectiveOpacity * 0.5})`;
+        ctx.fillText(visibleText, s.x + offset, s.y);
+      }
+      
+      // Apply duplicate ghost
+      if (Math.random() < ghost.probability) {
+        ctx.fillStyle = baseColor.replace(/[\d.]+\)$/, `${effectiveOpacity * ghost.opacity})`);
+        const ghostOffsetX = (Math.random() - 0.5) * ghost.offset * 2;
+        const ghostOffsetY = (Math.random() - 0.5) * ghost.offset * 2;
+        ctx.fillText(visibleText, s.x + ghostOffsetX, s.y + ghostOffsetY);
+      }
+      
+      // Apply slice displacement
+      if (Math.random() < slice.probability && slice.maxSlices > 0) {
+        const numSlices = 1 + Math.floor(Math.random() * slice.maxSlices);
+        const sliceHeight = s.fontSize / numSlices;
+        
+        ctx.save();
+        for (let sliceIdx = 0; sliceIdx < numSlices; sliceIdx++) {
+          const sliceOffset = (Math.random() - 0.5) * slice.maxOffset * 2;
+          const sliceY = s.y - s.fontSize + sliceIdx * sliceHeight;
+          
+          ctx.beginPath();
+          ctx.rect(0, sliceY, canvas.width, sliceHeight);
+          ctx.clip();
+          
+          ctx.fillStyle = baseColor.replace(/[\d.]+\)$/, `${effectiveOpacity})`);
+          ctx.fillText(visibleText, s.x + sliceOffset, s.y);
+          
+          ctx.restore();
+          ctx.save();
+        }
+        ctx.restore();
+      } else {
+        // Normal render
+        ctx.fillStyle = baseColor.replace(/[\d.]+\)$/, `${effectiveOpacity})`);
+        ctx.fillText(visibleText, s.x, s.y);
+      }
+    }
+  }
+  
+  // Apply noise overlay
+  if (noiseIntensity > 0) {
+    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    const data = imageData.data;
+    const noiseAmount = noiseIntensity * 50;
+    
+    // Sparse noise (not every pixel)
+    const noiseDensity = noiseIntensity * 0.01;
+    for (let i = 0; i < data.length; i += 4) {
+      if (Math.random() < noiseDensity) {
+        const noise = (Math.random() - 0.5) * noiseAmount;
+        data[i] = Math.min(255, Math.max(0, data[i] + noise));
+        data[i + 1] = Math.min(255, Math.max(0, data[i + 1] + noise));
+        data[i + 2] = Math.min(255, Math.max(0, data[i + 2] + noise));
+      }
+    }
+    ctx.putImageData(imageData, 0, 0);
   }
   
   requestAnimationFrame(updateAndRender);
 }
-
 // --- Initialization ---
 function resizeCanvas() {
   canvas.width = window.innerWidth;
@@ -397,7 +556,8 @@ async function init() {
   updateUI();
   
   // Start the render loop
-  nextSpawnTime = performance.now() + getNextPoissonDelay();
+  const startTime = performance.now();
+  nextSpawnTime = startTime + getNextPoissonDelay(startTime);
   requestAnimationFrame(updateAndRender);
 }
 

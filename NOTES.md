@@ -229,78 +229,115 @@ Press "Step →" to advance through the cycle. Button disables at final state.
 
 One sentence per line in `corpus/corpus.txt`. This format works for both verbatim extraction (whole lines) and Markov training (full text).
 
+### Visual Entropy Effects (Implemented)
+
+As degradation progresses, visual glitch effects intensify:
+
+**Flicker Effects:**
+| Effect | Description | Range |
+|--------|-------------|-------|
+| Flicker | Full frame skip | 0→15% |
+| Fade Flicker | Partial opacity drop (30-80%) | 0→20% |
+| Inverse | Black text on white flash | 0→8% |
+
+**Color Effects:**
+| Effect | Description | Range |
+|--------|-------------|-------|
+| Chromatic Aberration | RGB channel offset | 0→5px |
+| Color Shift | Random color (red, cyan, magenta, green, yellow) | 0→18% |
+| Bit Crush | Posterized grayscale flash | 0→12% |
+
+**Corruption Effects:**
+| Effect | Description | Range |
+|--------|-------------|-------|
+| Character Dropout | Random chars become spaces | 0→25% |
+| Duplicate Ghost | Faint offset copy | 0→35% |
+| Slice Displacement | Horizontal slices offset | 0→20% |
+| Noise Overlay | Static/grain on canvas | 0→50% |
+
+All effects scale with degradation phase, starting at 0 in verbatim and reaching maximum in final state.
+
 ---
 
 ## Planned Features
 
-### LFO on Spawn Rate
+### LFO on Spawn Rate (Implemented)
 
-Rather than a constant λ, modulate spawn rate with a low-frequency oscillator for organic breathing rhythm.
+Rather than a constant λ, spawn rate is modulated with a low-frequency oscillator for organic breathing rhythm.
 
 | LFO Parameter | Early Phases | Late Phases |
 |---------------|--------------|-------------|
 | Base λ | 0.3 | 1.5 |
 | Amplitude | ±0.1 (subtle) | ±0.5 (dramatic swings) |
 | Frequency | Slow (0.02 Hz, ~50s cycle) | Faster (0.1 Hz, ~10s cycle) |
-| Waveform | Sine (gentle) | Could shift to square/irregular |
-
-Implementation:
-```js
-getLambda(time) {
-  const base = this.getBaseLambda();        // from phase
-  const amplitude = this.getLfoAmplitude(); // grows with degradation
-  const frequency = this.getLfoFrequency(); // speeds up with degradation
-  
-  const lfo = Math.sin(time * frequency * Math.PI * 2);
-  return base + lfo * amplitude;
-}
-```
-
-Could extend LFO modulation to other parameters: font size range, typewriter speed, hold duration, overlap tolerance.
-
-### Visual Entropy Effects
-
-As degradation progresses, introduce visual instability to the text:
-
-**Flickering**
-- Random opacity fluctuations
-- Occasional brief disappearance (1-2 frames)
-- Intensity increases with degradation
-
-**Jittering**
-- Small random position offsets each frame
-- Could affect x, y, or both
-- Amplitude increases: 0px → 1px → 3px → 5px+
-
-**Other possibilities**
-- Character-level jitter (each letter offset independently)
-- Color shifts / chromatic aberration
-- Blur pulses
-- Glitch rectangles / scan lines
-- Font switching mid-word (late stages)
-
-**Implementation approach:**
-Add per-snippet or global `getJitter()` and `getFlicker()` methods to DegradationCycle, apply in render loop:
-
-```js
-// In render loop
-const jitter = cycle.getJitter();
-const flicker = cycle.getFlicker();
-
-const offsetX = (Math.random() - 0.5) * jitter;
-const offsetY = (Math.random() - 0.5) * jitter;
-const flickerOpacity = Math.random() > flicker ? 1 : 0;
-
-ctx.globalAlpha = s.opacity * flickerOpacity;
-ctx.fillText(visibleText, s.x + offsetX, s.y + offsetY);
-```
+| Waveform | Sine | Sine |
 
 ---
 
 ## Next Steps
 
 1. ~~Integrate Markov generator~~ ✓
-2. **Add timed progression** — Replace manual stepping with configurable timer
-3. **Piper integration** — Better voices, simultaneous playback
-4. **Voice degradation** — Match audio quality to text collapse stage
-5. **Collision detection** — Prevent text overlap (or embrace it?)
+2. ~~LFO spawn rate~~ ✓
+3. ~~Visual entropy effects~~ ✓
+4. **Implement time-based auto-stepping** (see plan below)
+5. **Piper integration** — Better voices, simultaneous playback
+6. **Voice degradation** — Match audio quality to text collapse stage
+
+---
+
+## Time-based Auto-stepping (Planned)
+
+Installation runs Tuesday 9am → Saturday 6pm (~105 hours), with accelerating decay.
+
+### Configuration
+
+```js
+const INSTALLATION = {
+  startTime: '2026-09-01T09:00:00',  // Tuesday 9am
+  endTime: '2026-09-05T18:00:00',    // Saturday 6pm
+  totalSteps: 20,
+};
+```
+
+### Pacing (accelerating decay)
+
+Early steps take longer, later steps happen faster — mimics real entropy/collapse.
+
+| Day | Cumulative Hours | Steps | Phase |
+|-----|------------------|-------|-------|
+| Tue | 0-10 | 0-1 | Verbatim, Word 10 |
+| Wed | 10-20 | 2-4 | Word 9-7 |
+| Thu | 20-30 | 5-8 | Word 6, Mixed begins |
+| Fri | 30-40 | 9-14 | Mixed deepens |
+| Sat | 40-50 | 15-20 | Char only → Final |
+
+### Easing function
+
+```js
+// Quadratic ease-in: slow start, fast end
+function getStepAtTime(elapsed, totalDuration, totalSteps) {
+  const progress = Math.min(1, elapsed / totalDuration);
+  const easedProgress = progress * progress; // quadratic
+  return Math.floor(easedProgress * totalSteps);
+}
+```
+
+### Startup logic
+
+1. Calculate elapsed time since `startTime`
+2. Apply easing function to get current step
+3. Call `cycle.jumpToStep(n)` to catch up
+4. Continue rendering from there
+5. Recalculate periodically (every minute) to stay in sync
+
+### Edge cases
+
+- Before start time → stay at step 0 (verbatim)
+- After end time → stay at final step (maximum entropy)
+- Computer turned off overnight → catches up on next startup
+
+### Files to modify
+
+- `processes/degradation-cycle.js` — add `jumpToStep(n)` method
+- `main.js` — add installation config, calculate step on init
+- Keep manual button for testing (hide in production?)

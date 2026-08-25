@@ -210,6 +210,316 @@ class DegradationCycle {
     }
   }
 
+  // --- LFO Spawn Rate ---
+
+  /**
+   * Get base lambda (spawn rate) for current phase
+   */
+  getBaseLambda() {
+    switch (this.phase) {
+      case PHASES.VERBATIM:
+        return 0.3;
+      case PHASES.WORD_MARKOV:
+        // 0.4 at order 10, up to 0.6 at order 6
+        return 0.4 + (10 - this.wordOrder) * 0.05;
+      case PHASES.MIXED:
+        // 0.7 at word order 5, up to 1.0 at word order 1
+        return 0.7 + (5 - this.wordOrder) * 0.075;
+      case PHASES.CHAR_ONLY:
+        // 1.0 at order 10, up to 1.5 at order 1
+        return 1.0 + (10 - this.charOrder) * 0.055;
+      case PHASES.FINAL:
+        return 1.5;
+      default:
+        return 0.3;
+    }
+  }
+
+  /**
+   * Get LFO amplitude (how much lambda varies)
+   */
+  getLfoAmplitude() {
+    switch (this.phase) {
+      case PHASES.VERBATIM:
+        return 0.1;
+      case PHASES.WORD_MARKOV:
+        return 0.15 + (10 - this.wordOrder) * 0.02;
+      case PHASES.MIXED:
+        return 0.25 + (5 - this.wordOrder) * 0.05;
+      case PHASES.CHAR_ONLY:
+        return 0.4 + (10 - this.charOrder) * 0.01;
+      case PHASES.FINAL:
+        return 0.5;
+      default:
+        return 0.1;
+    }
+  }
+
+  /**
+   * Get LFO frequency in Hz (cycles per second)
+   */
+  getLfoFrequency() {
+    switch (this.phase) {
+      case PHASES.VERBATIM:
+        return 0.02; // ~50s cycle
+      case PHASES.WORD_MARKOV:
+        return 0.025 + (10 - this.wordOrder) * 0.005;
+      case PHASES.MIXED:
+        return 0.05 + (5 - this.wordOrder) * 0.01;
+      case PHASES.CHAR_ONLY:
+        return 0.08 + (10 - this.charOrder) * 0.002;
+      case PHASES.FINAL:
+        return 0.1; // ~10s cycle
+      default:
+        return 0.02;
+    }
+  }
+
+  /**
+   * Get current lambda with LFO modulation applied
+   * @param {number} time - Current time in seconds
+   */
+  getLambda(time) {
+    const base = this.getBaseLambda();
+    const amplitude = this.getLfoAmplitude();
+    const frequency = this.getLfoFrequency();
+    
+    const lfo = Math.sin(time * frequency * Math.PI * 2);
+    // Ensure lambda never goes below 0.1
+    return Math.max(0.1, base + lfo * amplitude);
+  }
+
+  // --- Visual Entropy Effects ---
+
+  /**
+   * Get flicker probability (chance of momentary disappearance per frame)
+   * Returns 0-1, where 0 = no flicker, higher = more flicker
+   */
+  getFlicker() {
+    switch (this.phase) {
+      case PHASES.VERBATIM:
+        return 0;
+      case PHASES.WORD_MARKOV:
+        return (10 - this.wordOrder) * 0.005;
+      case PHASES.MIXED:
+        return 0.02 + (5 - this.wordOrder) * 0.015;
+      case PHASES.CHAR_ONLY:
+        return 0.08 + (10 - this.charOrder) * 0.008;
+      case PHASES.FINAL:
+        return 0.15;
+      default:
+        return 0;
+    }
+  }
+
+  /**
+   * Get fade flicker probability (chance of partial opacity drop per frame)
+   */
+  getFadeFlicker() {
+    switch (this.phase) {
+      case PHASES.VERBATIM:
+        return 0;
+      case PHASES.WORD_MARKOV:
+        return (10 - this.wordOrder) * 0.01;
+      case PHASES.MIXED:
+        return 0.05 + (5 - this.wordOrder) * 0.02;
+      case PHASES.CHAR_ONLY:
+        return 0.12 + (10 - this.charOrder) * 0.01;
+      case PHASES.FINAL:
+        return 0.2;
+      default:
+        return 0;
+    }
+  }
+
+  /**
+   * Get inverse flicker probability (chance of inverted colors per frame)
+   */
+  getInverseFlicker() {
+    switch (this.phase) {
+      case PHASES.VERBATIM:
+        return 0;
+      case PHASES.WORD_MARKOV:
+        return 0;
+      case PHASES.MIXED:
+        return (5 - this.wordOrder) * 0.005;
+      case PHASES.CHAR_ONLY:
+        return 0.03 + (10 - this.charOrder) * 0.005;
+      case PHASES.FINAL:
+        return 0.08;
+      default:
+        return 0;
+    }
+  }
+
+  /**
+   * Get chromatic aberration amount in pixels (RGB channel offset)
+   */
+  getChromaticAberration() {
+    switch (this.phase) {
+      case PHASES.VERBATIM:
+        return 0;
+      case PHASES.WORD_MARKOV:
+        return (10 - this.wordOrder) * 0.3;
+      case PHASES.MIXED:
+        return 1.5 + (5 - this.wordOrder) * 0.4;
+      case PHASES.CHAR_ONLY:
+        return 3 + (10 - this.charOrder) * 0.2;
+      case PHASES.FINAL:
+        return 5;
+      default:
+        return 0;
+    }
+  }
+
+  /**
+   * Get color shift probability (chance of wrong color per frame)
+   */
+  getColorShift() {
+    switch (this.phase) {
+      case PHASES.VERBATIM:
+        return 0;
+      case PHASES.WORD_MARKOV:
+        return (10 - this.wordOrder) * 0.008;
+      case PHASES.MIXED:
+        return 0.04 + (5 - this.wordOrder) * 0.015;
+      case PHASES.CHAR_ONLY:
+        return 0.1 + (10 - this.charOrder) * 0.01;
+      case PHASES.FINAL:
+        return 0.18;
+      default:
+        return 0;
+    }
+  }
+
+  /**
+   * Get noise overlay intensity (0-1)
+   */
+  getNoiseOverlay() {
+    switch (this.phase) {
+      case PHASES.VERBATIM:
+        return 0;
+      case PHASES.WORD_MARKOV:
+        return (10 - this.wordOrder) * 0.02;
+      case PHASES.MIXED:
+        return 0.1 + (5 - this.wordOrder) * 0.04;
+      case PHASES.CHAR_ONLY:
+        return 0.25 + (10 - this.charOrder) * 0.03;
+      case PHASES.FINAL:
+        return 0.5;
+      default:
+        return 0;
+    }
+  }
+
+  /**
+   * Get character dropout probability (chance each character doesn't render)
+   */
+  getCharDropout() {
+    switch (this.phase) {
+      case PHASES.VERBATIM:
+        return 0;
+      case PHASES.WORD_MARKOV:
+        return 0;
+      case PHASES.MIXED:
+        return (5 - this.wordOrder) * 0.02;
+      case PHASES.CHAR_ONLY:
+        return 0.1 + (10 - this.charOrder) * 0.015;
+      case PHASES.FINAL:
+        return 0.25;
+      default:
+        return 0;
+    }
+  }
+
+  /**
+   * Get duplicate ghost probability and intensity
+   * Returns { probability, opacity, offset }
+   */
+  getDuplicateGhost() {
+    let prob, opacity, offset;
+    switch (this.phase) {
+      case PHASES.VERBATIM:
+        return { probability: 0, opacity: 0, offset: 0 };
+      case PHASES.WORD_MARKOV:
+        prob = (10 - this.wordOrder) * 0.02;
+        opacity = 0.2;
+        offset = 2;
+        break;
+      case PHASES.MIXED:
+        prob = 0.1 + (5 - this.wordOrder) * 0.03;
+        opacity = 0.25;
+        offset = 3;
+        break;
+      case PHASES.CHAR_ONLY:
+        prob = 0.2 + (10 - this.charOrder) * 0.02;
+        opacity = 0.3;
+        offset = 4;
+        break;
+      case PHASES.FINAL:
+        prob = 0.35;
+        opacity = 0.35;
+        offset = 5;
+        break;
+      default:
+        return { probability: 0, opacity: 0, offset: 0 };
+    }
+    return { probability: prob, opacity, offset };
+  }
+
+  /**
+   * Get slice displacement settings
+   * Returns { probability, maxSlices, maxOffset }
+   */
+  getSliceDisplacement() {
+    switch (this.phase) {
+      case PHASES.VERBATIM:
+        return { probability: 0, maxSlices: 0, maxOffset: 0 };
+      case PHASES.WORD_MARKOV:
+        return { 
+          probability: (10 - this.wordOrder) * 0.01, 
+          maxSlices: 1, 
+          maxOffset: 3 
+        };
+      case PHASES.MIXED:
+        return { 
+          probability: 0.05 + (5 - this.wordOrder) * 0.02, 
+          maxSlices: 2, 
+          maxOffset: 6 
+        };
+      case PHASES.CHAR_ONLY:
+        return { 
+          probability: 0.12 + (10 - this.charOrder) * 0.01, 
+          maxSlices: 3, 
+          maxOffset: 10 
+        };
+      case PHASES.FINAL:
+        return { probability: 0.2, maxSlices: 4, maxOffset: 15 };
+      default:
+        return { probability: 0, maxSlices: 0, maxOffset: 0 };
+    }
+  }
+
+  /**
+   * Get bit crush probability (reduced color depth flash)
+   */
+  getBitCrush() {
+    switch (this.phase) {
+      case PHASES.VERBATIM:
+        return 0;
+      case PHASES.WORD_MARKOV:
+        return (10 - this.wordOrder) * 0.005;
+      case PHASES.MIXED:
+        return 0.03 + (5 - this.wordOrder) * 0.01;
+      case PHASES.CHAR_ONLY:
+        return 0.07 + (10 - this.charOrder) * 0.008;
+      case PHASES.FINAL:
+        return 0.12;
+      default:
+        return 0;
+    }
+  }
+
   /**
    * Get step count (how many steps from start)
    */

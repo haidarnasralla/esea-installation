@@ -60,6 +60,21 @@
         font-weight: 500;
       }
       
+      .status-divider {
+        height: 1px;
+        background: rgba(255, 255, 255, 0.2);
+        margin: 12px 0;
+      }
+      
+      #controls h3 {
+        margin: 10px 0 8px 0;
+        font-size: 11px;
+        font-weight: 600;
+        color: rgba(255, 255, 255, 0.5);
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+      }
+      
       #description {
         display: block;
         margin: 15px 0;
@@ -130,6 +145,71 @@
       <div class="status-row">
         <span class="status-label">Overlap:</span>
         <span class="status-value" id="overlap-tolerance">0%</span>
+      </div>
+      
+      <div class="status-divider"></div>
+      
+      <div class="status-row">
+        <span class="status-label">λ (spawn rate):</span>
+        <span class="status-value" id="lambda">0.30</span>
+      </div>
+      
+      <div class="status-divider"></div>
+      
+      <h3>Flicker Effects</h3>
+      
+      <div class="status-row">
+        <span class="status-label">Flicker:</span>
+        <span class="status-value" id="flicker">0%</span>
+      </div>
+      
+      <div class="status-row">
+        <span class="status-label">Fade Flicker:</span>
+        <span class="status-value" id="fade-flicker">0%</span>
+      </div>
+      
+      <div class="status-row">
+        <span class="status-label">Inverse:</span>
+        <span class="status-value" id="inverse-flicker">0%</span>
+      </div>
+      
+      <h3>Color Effects</h3>
+      
+      <div class="status-row">
+        <span class="status-label">Chromatic:</span>
+        <span class="status-value" id="chromatic">0.0px</span>
+      </div>
+      
+      <div class="status-row">
+        <span class="status-label">Color Shift:</span>
+        <span class="status-value" id="color-shift">0%</span>
+      </div>
+      
+      <div class="status-row">
+        <span class="status-label">Bit Crush:</span>
+        <span class="status-value" id="bit-crush">0%</span>
+      </div>
+      
+      <h3>Corruption Effects</h3>
+      
+      <div class="status-row">
+        <span class="status-label">Char Dropout:</span>
+        <span class="status-value" id="char-dropout">0%</span>
+      </div>
+      
+      <div class="status-row">
+        <span class="status-label">Ghost:</span>
+        <span class="status-value" id="ghost">0%</span>
+      </div>
+      
+      <div class="status-row">
+        <span class="status-label">Slice:</span>
+        <span class="status-value" id="slice">0%</span>
+      </div>
+      
+      <div class="status-row">
+        <span class="status-label">Noise:</span>
+        <span class="status-value" id="noise">0%</span>
       </div>
       
       <span id="description">Verbatim (exact corpus lines)</span>
