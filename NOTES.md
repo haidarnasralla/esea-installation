@@ -1,4 +1,4 @@
-# Model Collapse Installation — Project Notes
+# Eventually, the Machines Speak Without Us
 
 ## Concept
 
@@ -21,9 +21,12 @@ The interaction data of workshop participants with a local chatbot is collected.
 - Formula: `nextDelay = -Math.log(Math.random()) / lambda * 1000`
 
 ### TTS
-- Each snippet is spoken aloud using LPC synthesis (TMS5100/Speak & Spell style)
-- Speech is pre-rendered and played back synced to typing duration
-- Robotic, lo-fi aesthetic matches the installation's themes
+- Hybrid TTS system combining human-recorded LPC voices with SAM (Software Automatic Mouth)
+- Early phases: Human voices (Daniel, Samantha, Whisper) encoded as LPC
+- Late phases: SAM synthetic voice takes over completely
+- Stereo panning matches text position on screen
+- Volume scales with text size (larger = louder)
+- Audio chain includes limiter to prevent distortion
 
 ## Simulating Collapse (Design Notes)
 
@@ -60,25 +63,77 @@ See "Degradation Cycle (Implemented)" section below for the actual implementatio
 
 ### TTS Options
 
-#### LPC Synthesis (current)
-Custom implementation of Texas Instruments TMS5100 algorithm (Speak & Spell chip).
+#### Hybrid TTS (current — default)
 
-**Pros:**
-- Distinctive robotic aesthetic that fits the installation's themes
-- No external dependencies
-- Multiple simultaneous voices possible (Web Audio API)
-- Full control over degradation effects
-- Works offline
+Combines three TTS technologies with a fallback chain:
 
-**Cons:**
-- Limited vocabulary (words must be LPC-encoded)
-- Unknown words use random vocabulary fragments
+1. **LPC Voices (Daniel, Samantha, Whisper)** — Human speech recorded via macOS `say`, encoded to TMS5220 LPC bitstreams
+2. **SAM (Software Automatic Mouth)** — 1982 Commodore 64 speech synthesizer, JavaScript port
+3. **Fallback chain:** Primary LPC voice → Other LPC voices → SAM
 
-**How it works:**
-1. Excitation: Chirp waveform (voiced) or LFSR noise (unvoiced)
-2. 10-pole lattice filter shapes the excitation
-3. Frame-based (25ms frames, 8kHz sample rate)
-4. Playback rate adjusted to sync with typing duration
+**Voice Transition:**
+| Progress | LPC Probability | Behavior |
+|----------|-----------------|----------|
+| 0–20% | 100% | Pure LPC (human voices) |
+| 20–50% | 100% → 70% | LPC dominant, occasional SAM |
+| 50–80% | 70% → 10% | SAM taking over |
+| 80–100% | 10% → 0% | Pure SAM (robotic/glitchy) |
+
+**SAM Voice Degradation:**
+- Early: Varied human-like voices (female pitch 100-150, male 70-100, child 140-180)
+- Mid: Blending toward robotic monotone
+- Late: Extreme/glitchy parameters with stutter and noise effects
+
+#### LPC Vocabulary Build
+
+Pre-encode corpus words with macOS voices:
+
+```bash
+# Prerequisites
+brew install ffmpeg
+python3 -m venv /tmp/esea-venv
+cd /tmp && git clone https://github.com/ptwz/python_wizard.git
+cd /tmp/python_wizard && /tmp/esea-venv/bin/pip install .
+
+# Build vocabulary (takes ~90 minutes for 3 voices × 2000 words)
+caffeinate -i ./scripts/build-vocab.sh
+```
+
+**Output:**
+- `build/voices/Daniel.js` — ~1.4MB
+- `build/voices/Samantha.js` — ~1.3MB  
+- `build/voices/Whisper.js` — ~1.6MB
+
+Each file: `export default { 'word': [0x00, 0x01, ...], ... }`
+
+#### SAM (Software Automatic Mouth)
+
+1982 C64 speech synthesizer — perfect period-accurate robotic voice.
+
+**Voice Parameters:**
+| Parameter | Range | Effect |
+|-----------|-------|--------|
+| speed | 1-255 | Speech rate |
+| pitch | 1-255 | Voice frequency |
+| throat | 1-255 | Resonance |
+| mouth | 1-255 | Formant shaping |
+
+**Presets:**
+- Female: pitch 100-150, throat 120-145, mouth 128-155
+- Male: pitch 70-100, throat 115-140, mouth 110-135
+- Child: pitch 140-180, throat 130-155, mouth 140-170
+- Robot: pitch 64, throat 180, mouth 180
+
+#### Audio Routing
+
+```
+source → snippetGain → panner → masterGain → limiter → destination
+```
+
+- **snippetGain:** Per-snippet volume (font size → 0.4–1.0)
+- **panner:** StereoPanner, position from text center (-1 left, +1 right)
+- **masterGain:** Global volume control
+- **limiter:** DynamicsCompressor (threshold -6dB, ratio 20:1)
 
 #### Piper TTS (alternative)
 Lightweight neural TTS, runs on CPU, even on Raspberry Pi. Could be used if more natural speech is desired.
@@ -126,16 +181,27 @@ const FONTS = [
 ### File Structure
 ```
 ├── index.html                    — Fullscreen canvas + control panel
-├── config.js                     — Environment mode (test/production)
+├── config.js                     — Environment mode, TTS engine selection
 ├── main.js                       — Entry point, init, render loop
 ├── corpus.js                     — CORPUS array (inlined text)
 ├── lib/
 │   ├── renderer.js               — Rendering, glitch effects, flicker-out
 │   ├── collision.js              — Position finding, overlap detection
-│   ├── tts.js                    — Speech synthesis interface
-│   └── formant-synth.js          — LPC decoder and TMS5100 synthesizer
+│   ├── tts.js                    — TTS router (hybrid/sam/lpc)
+│   ├── hybrid-tts.js             — Hybrid TTS (LPC + SAM fallback)
+│   ├── sam-synth.js              — SAM wrapper with Web Audio
+│   ├── formant-synth.js          — LPC decoder and TMS5100 synthesizer
+│   └── vendor/
+│       └── sam.js                — SAM.js library (v0.3.0)
+├── build/
+│   └── voices/                   — Generated LPC vocabulary
+│       ├── Daniel.js
+│       ├── Samantha.js
+│       └── Whisper.js
+├── scripts/
+│   └── build-vocab.sh            — LPC vocabulary encoder
 └── processes/
-    ├── degradation-cycle.js      — State machine for phase progression
+    ├── degradation-cycle.js      — State machine, voice params, effects
     └── markov-generator.js       — Word and character level n-grams
 ```
 
@@ -268,8 +334,13 @@ All effects scale with degradation phase, starting at 0 in verbatim and reaching
 5. ~~Modular code structure~~ ✓
 6. ~~Flicker-out effect~~ ✓
 7. ~~LPC speech synthesis~~ ✓
-8. **Voice degradation** — Match audio quality to text collapse stage
-9. **Piper integration** — Alternative for higher quality voices if needed
+8. ~~Voice degradation~~ ✓ (human → robot → glitchy)
+9. ~~Hybrid TTS (LPC + SAM)~~ ✓
+10. ~~Stereo panning~~ ✓ (position-based)
+11. ~~Volume scaling~~ ✓ (font size-based)
+12. ~~Audio limiter~~ ✓
+13. **Production testing** — Full run-through with real corpus
+14. **Performance optimization** — Profile and optimize if needed
 
 ---
 
@@ -305,21 +376,34 @@ Each frame during the flicker-out phase:
 
 ---
 
-## LPC Speech Synthesis (Implemented)
+## LPC Speech Synthesis
 
-Replaced Web Speech API with TMS5100-style LPC synthesis (Speak & Spell chip).
+### TMS5100 Decoder (formant-synth.js)
 
-### How It Works
+Custom implementation of Texas Instruments TMS5100 algorithm (Speak & Spell chip).
 
+**How it works:**
 1. **Excitation source:** Chirp waveform (voiced) or LFSR noise (unvoiced)
 2. **10-pole lattice filter:** Shapes excitation using reflection coefficients K1-K10
 3. **Frame-based:** Parameters update every 25ms (200 samples at 8kHz)
-4. **Vocabulary:** Actual LPC-encoded words from Speak & Spell ROM
+4. **Vocabulary:** Built-in Talkie library words + custom LPC-encoded corpus
 
-### Vocabulary Words Available
-`the`, `time`, `is`, `good`, `morning`, `six`, `eleven`, `thirty`, `am`, `pause`
+### Built-in Vocabulary
 
-For unknown words, the system concatenates random fragments from the vocabulary to create "speech-like gibberish."
+~112 common English words from Talkie library (GPLv2):
+`the`, `a`, `is`, `to`, `in`, `for`, `on`, `at`, `from`, `by`, `i`, `you`, `not`, `all`, `have`, `go`, `no`, etc.
+
+### Custom LPC Vocabulary
+
+Full corpus encoded with macOS voices via `scripts/build-vocab.sh`:
+
+1. Extract unique words from `corpus.js`
+2. Synthesize each word with `say -v Daniel/Samantha/Whisper`
+3. Convert to 8kHz mono WAV with `ffmpeg`
+4. Encode to TMS5220 LPC with `python_wizard`
+5. Output as JavaScript modules
+
+**Voices available:** Daniel (British male), Samantha (US female), Whisper (breathy)
 
 ### Typing Synchronization
 
@@ -327,30 +411,45 @@ Speech is pre-rendered when a snippet spawns, then played back at a rate adjuste
 
 ```js
 const typingDuration = (text.length * charDelay) / 1000;
-speakOverDuration(text, typingDuration);
+speakOverDuration(text, typingDuration, { voiceMix, samVoiceParams, pan, volume });
 ```
 
-The `playbackRate` of the audio buffer is set to stretch/compress the speech to match exactly how long the typewriter effect takes.
+---
 
-### Technical Details
+## Hybrid TTS System (Implemented)
 
-- Sample rate: 8kHz (authentic TMS5100 rate)
-- Upsampled to native audio rate with sample-and-hold (maintains crunchy lo-fi quality)
-- Bit-reversed byte reading (matches Talkie library format)
-- Coefficient tables from original TMS5100 documentation
+### Architecture
 
-### Files
-- `lib/formant-synth.js` — LPC decoder and synthesizer
-- `lib/tts.js` — Interface layer (`speak()`, `speakOverDuration()`)
+```
+┌─────────────────────────────────────────────────────────┐
+│                    hybrid-tts.js                        │
+├─────────────────────────────────────────────────────────┤
+│  For each word in phrase:                               │
+│    1. Try primary LPC voice (Daniel/Samantha/Whisper)   │
+│    2. Try other LPC voices                              │
+│    3. Fall back to SAM                                  │
+│                                                         │
+│  Voice selection based on degradation progress:         │
+│    - getVoiceMix() returns { lpcProbability }           │
+│    - getVoiceParams() returns SAM parameters            │
+└─────────────────────────────────────────────────────────┘
+```
 
-### Future: Voice Degradation
+### Configuration (config.js)
 
-The LPC synthesis opens possibilities for audio degradation matching text collapse:
-- Drift formant frequencies (vowels become ambiguous)
-- Add noise to excitation source
-- Reduce coefficient precision
-- Shorten/fragment utterances
-- Detune or corrupt filter coefficients
+```js
+// TTS Engine Selection
+// - 'hybrid': LPC voices with SAM fallback (default)
+// - 'sam': SAM only (Software Automatic Mouth)
+// - 'lpc': LPC only (TMS5100/Speak&Spell style)
+TTS_ENGINE: 'hybrid',
+```
+
+### Spatial Audio
+
+- **Stereo panning:** Text center X position → pan (-1 left to +1 right)
+- **Volume:** Font size maps to volume (16px → 40%, 48px → 100%)
+- **Limiter:** DynamicsCompressor prevents clipping with multiple voices
 
 ---
 
