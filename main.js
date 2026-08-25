@@ -156,6 +156,101 @@ function getNextPoissonDelay() {
   return -Math.log(Math.random()) / CONFIG.lambda * 1000; // ms
 }
 
+// --- Collision Detection ---
+function getSnippetBounds(snippet) {
+  ctx.font = `${snippet.fontSize}px ${snippet.fontFamily}`;
+  const metrics = ctx.measureText(snippet.text);
+  const width = metrics.width;
+  const height = snippet.fontSize * 1.2; // approximate line height
+  
+  return {
+    x: snippet.x,
+    y: snippet.y - height, // text baseline is at y, so top is above
+    width,
+    height,
+    centerX: snippet.x + width / 2,
+    centerY: snippet.y - height / 2,
+  };
+}
+
+function checkOverlap(newBounds, existingSnippets, minDistance, tolerance) {
+  for (const snippet of existingSnippets) {
+    const existing = getSnippetBounds(snippet);
+    
+    // Center-to-center distance check (fast)
+    const dx = newBounds.centerX - existing.centerX;
+    const dy = newBounds.centerY - existing.centerY;
+    const distance = Math.sqrt(dx * dx + dy * dy);
+    
+    // Effective minimum distance, reduced by tolerance
+    const effectiveMinDistance = minDistance * (1 - tolerance);
+    
+    if (distance < effectiveMinDistance) {
+      return true; // Too close
+    }
+    
+    // Bounding box overlap check (only if tolerance < 0.5)
+    if (tolerance < 0.5) {
+      const padding = (1 - tolerance * 2) * 20; // 20px padding at 0 tolerance, 0 at 0.5+
+      
+      const overlapX = newBounds.x < existing.x + existing.width + padding &&
+                       newBounds.x + newBounds.width + padding > existing.x;
+      const overlapY = newBounds.y < existing.y + existing.height + padding &&
+                       newBounds.y + newBounds.height + padding > existing.y;
+      
+      if (overlapX && overlapY) {
+        return true; // Bounding boxes overlap
+      }
+    }
+  }
+  
+  return false; // No overlap
+}
+
+function findValidPosition(text, fontSize, fontFamily, maxAttempts = 20) {
+  const tolerance = cycle.getOverlapTolerance();
+  const minDistance = cycle.getMinSpawnDistance();
+  
+  ctx.font = `${fontSize}px ${fontFamily}`;
+  const textWidth = ctx.measureText(text).width;
+  const textHeight = fontSize * 1.2;
+  
+  const padding = 50;
+  
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    const maxX = Math.max(padding, canvas.width - textWidth - padding);
+    const x = padding + Math.random() * (maxX - padding);
+    const y = padding + textHeight + Math.random() * (canvas.height - padding * 2 - textHeight);
+    
+    const newBounds = {
+      x,
+      y: y - textHeight,
+      width: textWidth,
+      height: textHeight,
+      centerX: x + textWidth / 2,
+      centerY: y - textHeight / 2,
+    };
+    
+    if (!checkOverlap(newBounds, snippets, minDistance, tolerance)) {
+      return { x, y, valid: true };
+    }
+  }
+  
+  // If we couldn't find a valid position:
+  // - In early phases, skip this spawn
+  // - In later phases (tolerance > 0.3), allow overlap anyway
+  if (tolerance > 0.3) {
+    const maxX = Math.max(padding, canvas.width - textWidth - padding);
+    return {
+      x: padding + Math.random() * (maxX - padding),
+      y: padding + textHeight + Math.random() * (canvas.height - padding * 2 - textHeight),
+      valid: true,
+    };
+  }
+  
+  return { x: 0, y: 0, valid: false };
+}
+
 // --- Snippet Factory ---
 function spawnSnippet() {
   if (corpusLines.length === 0) return;
@@ -165,15 +260,15 @@ function spawnSnippet() {
     Math.random() * (CONFIG.maxFontSize - CONFIG.minFontSize);
   const fontFamily = FONTS[Math.floor(Math.random() * FONTS.length)];
   
-  // Measure text width to avoid spawning too close to right edge
-  ctx.font = `${fontSize}px ${fontFamily}`;
-  const textWidth = ctx.measureText(text).width;
+  // Find a valid position that doesn't overlap (based on current phase)
+  const position = findValidPosition(text, fontSize, fontFamily);
   
-  // Random position (avoid edges, account for text width)
-  const padding = 50;
-  const maxX = Math.max(padding, canvas.width - textWidth - padding);
-  const x = padding + Math.random() * (maxX - padding);
-  const y = padding + Math.random() * (canvas.height - padding * 2);
+  if (!position.valid) {
+    // Skip this spawn - couldn't find non-overlapping position
+    return;
+  }
+  
+  const { x, y } = position;
   
   // Character delay for typewriter effect
   const charDelay = CONFIG.minCharDelay + 
@@ -201,12 +296,14 @@ function spawnSnippet() {
 // --- UI Update ---
 function updateUI() {
   const state = cycle.getState();
+  const tolerance = cycle.getOverlapTolerance();
   
   document.getElementById('phase').textContent = state.phase;
   document.getElementById('description').textContent = state.description;
   document.getElementById('word-order').textContent = state.wordOrder;
   document.getElementById('char-order').textContent = state.charOrder;
   document.getElementById('char-active').textContent = state.charModeActive ? 'Yes' : 'No';
+  document.getElementById('overlap-tolerance').textContent = `${Math.round(tolerance * 100)}%`;
   
   // Disable button at final state
   const stepBtn = document.getElementById('step-btn');

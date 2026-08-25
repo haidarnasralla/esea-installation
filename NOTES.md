@@ -231,6 +231,72 @@ One sentence per line in `corpus/corpus.txt`. This format works for both verbati
 
 ---
 
+## Planned Features
+
+### LFO on Spawn Rate
+
+Rather than a constant λ, modulate spawn rate with a low-frequency oscillator for organic breathing rhythm.
+
+| LFO Parameter | Early Phases | Late Phases |
+|---------------|--------------|-------------|
+| Base λ | 0.3 | 1.5 |
+| Amplitude | ±0.1 (subtle) | ±0.5 (dramatic swings) |
+| Frequency | Slow (0.02 Hz, ~50s cycle) | Faster (0.1 Hz, ~10s cycle) |
+| Waveform | Sine (gentle) | Could shift to square/irregular |
+
+Implementation:
+```js
+getLambda(time) {
+  const base = this.getBaseLambda();        // from phase
+  const amplitude = this.getLfoAmplitude(); // grows with degradation
+  const frequency = this.getLfoFrequency(); // speeds up with degradation
+  
+  const lfo = Math.sin(time * frequency * Math.PI * 2);
+  return base + lfo * amplitude;
+}
+```
+
+Could extend LFO modulation to other parameters: font size range, typewriter speed, hold duration, overlap tolerance.
+
+### Visual Entropy Effects
+
+As degradation progresses, introduce visual instability to the text:
+
+**Flickering**
+- Random opacity fluctuations
+- Occasional brief disappearance (1-2 frames)
+- Intensity increases with degradation
+
+**Jittering**
+- Small random position offsets each frame
+- Could affect x, y, or both
+- Amplitude increases: 0px → 1px → 3px → 5px+
+
+**Other possibilities**
+- Character-level jitter (each letter offset independently)
+- Color shifts / chromatic aberration
+- Blur pulses
+- Glitch rectangles / scan lines
+- Font switching mid-word (late stages)
+
+**Implementation approach:**
+Add per-snippet or global `getJitter()` and `getFlicker()` methods to DegradationCycle, apply in render loop:
+
+```js
+// In render loop
+const jitter = cycle.getJitter();
+const flicker = cycle.getFlicker();
+
+const offsetX = (Math.random() - 0.5) * jitter;
+const offsetY = (Math.random() - 0.5) * jitter;
+const flickerOpacity = Math.random() > flicker ? 1 : 0;
+
+ctx.globalAlpha = s.opacity * flickerOpacity;
+ctx.fillText(visibleText, s.x + offsetX, s.y + offsetY);
+```
+
+---
+
 ## Next Steps
 
 1. ~~Integrate Markov generator~~ ✓

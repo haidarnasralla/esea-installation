@@ -158,6 +158,59 @@ class DegradationCycle {
   }
 
   /**
+   * Get overlap tolerance (0 = no overlap allowed, 0.6 = max overlap allowed)
+   * Scales with degradation progress, capped at 60%
+   */
+  getOverlapTolerance() {
+    let tolerance;
+    
+    switch (this.phase) {
+      case PHASES.VERBATIM:
+        tolerance = 0;
+        break;
+      case PHASES.WORD_MARKOV:
+        // 0 at order 10, gradually increase to 0.12 at order 6
+        tolerance = (10 - this.wordOrder) * 0.03;
+        break;
+      case PHASES.MIXED:
+        // 0.15 at start, increase as word order drops
+        tolerance = 0.15 + (5 - this.wordOrder) * 0.06;
+        break;
+      case PHASES.CHAR_ONLY:
+        // 0.45 at order 10, increase toward 0.6 as it drops
+        tolerance = 0.45 + (10 - this.charOrder) * 0.015;
+        break;
+      case PHASES.FINAL:
+        tolerance = 0.6;
+        break;
+      default:
+        tolerance = 0;
+    }
+    
+    return Math.min(tolerance, 0.6);
+  }
+
+  /**
+   * Get minimum spawn distance in pixels (base value before tolerance applied)
+   */
+  getMinSpawnDistance() {
+    switch (this.phase) {
+      case PHASES.VERBATIM:
+        return 150;
+      case PHASES.WORD_MARKOV:
+        return 120;
+      case PHASES.MIXED:
+        return 80;
+      case PHASES.CHAR_ONLY:
+        return 40;
+      case PHASES.FINAL:
+        return 0;
+      default:
+        return 150;
+    }
+  }
+
+  /**
    * Get step count (how many steps from start)
    */
   getStepCount() {
