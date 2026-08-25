@@ -11,7 +11,7 @@ import ENV from './config.js';
 import { CORPUS } from './corpus.js';
 import MarkovGenerator from './processes/markov-generator.js';
 import { DegradationCycle } from './processes/degradation-cycle.js';
-import { renderSnippet, applyNoiseOverlay, generateNoiseTextures } from './lib/renderer.js';
+import { renderSnippet, renderFlickerOut, applyNoiseOverlay, generateNoiseTextures } from './lib/renderer.js';
 import { findValidPosition } from './lib/collision.js';
 import { initTTS, speak } from './lib/tts.js';
 
@@ -48,7 +48,7 @@ const CONFIG = {
   
   // Lifespan
   holdDuration: 3,      // seconds to stay visible after typing
-  fadeOutDuration: 2,   // seconds to fade out
+  // flickerOutDuration is now controlled by DegradationCycle.getFlickerOutDuration()
   
   // Markov snippet length
   minSnippetWords: 6,
@@ -138,6 +138,8 @@ function spawnSnippet() {
     visibleChars: 0,
     timeSinceLastChar: 0,
     holdTimer: 0,
+    flickerTimer: 0,        // tracks time spent flickering
+    flickerDuration: cycle.getFlickerOutDuration(),
     opacity: initialOpacity,
     state: 'typing',
   });
@@ -167,6 +169,12 @@ function updateUI() {
   document.getElementById('ghost').textContent = `${Math.round(cycle.getDuplicateGhost().probability * 100)}%`;
   document.getElementById('slice').textContent = `${Math.round(cycle.getSliceDisplacement().probability * 100)}%`;
   document.getElementById('bit-crush').textContent = `${Math.round(cycle.getBitCrush() * 100)}%`;
+
+  // Flicker-out effect parameters
+  document.getElementById('flicker-out-duration').textContent = `${cycle.getFlickerOutDuration().toFixed(1)}s`;
+  document.getElementById('flicker-out-intensity').textContent = `${Math.round(cycle.getFlickerOutIntensity() * 100)}%`;
+  document.getElementById('char-scatter').textContent = `${Math.round(cycle.getCharacterScatter() * 100)}%`;
+  document.getElementById('flicker-jitter').textContent = `${cycle.getFlickerJitter().toFixed(1)}px`;
 
   const stepBtn = document.getElementById('step-btn');
   if (cycle.isFinal()) {
@@ -234,18 +242,30 @@ function updateAndRender(timestamp) {
     } else if (s.state === 'holding') {
       s.holdTimer += deltaTime;
       if (s.holdTimer >= CONFIG.holdDuration) {
-        s.state = 'fading';
+        s.state = 'flickering';
       }
-    } else if (s.state === 'fading') {
-      s.opacity -= deltaTime / CONFIG.fadeOutDuration;
-      if (s.opacity <= 0) {
+    } else if (s.state === 'flickering') {
+      s.flickerTimer += deltaTime;
+      if (s.flickerTimer >= s.flickerDuration) {
         snippets.splice(i, 1);
         continue;
       }
     }
 
+    // Get flicker-out parameters
+    const flickerOutParams = {
+      intensity: cycle.getFlickerOutIntensity(),
+      characterScatter: cycle.getCharacterScatter(),
+      jitter: cycle.getFlickerJitter(),
+    };
+
     // Render with effects
-    renderSnippet(ctx, s, effects, CONFIG);
+    if (s.state === 'flickering') {
+      const progress = s.flickerTimer / s.flickerDuration; // 0 → 1
+      renderFlickerOut(ctx, s, progress, flickerOutParams, effects, CONFIG);
+    } else {
+      renderSnippet(ctx, s, effects, CONFIG);
+    }
   }
 
   // Apply noise

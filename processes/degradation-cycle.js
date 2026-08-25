@@ -478,6 +478,91 @@ class DegradationCycle {
     }
   }
 
+  // --- Flicker-Out Effect (text disappearance) ---
+
+  /**
+   * Get flicker-out duration in seconds
+   * Early phases: quick, clean exit. Later phases: prolonged death throes.
+   */
+  getFlickerOutDuration() {
+    switch (this.phase) {
+      case PHASES.VERBATIM:
+        return 0.4;
+      case PHASES.WORD_MARKOV:
+        return 0.5 + (10 - this.wordOrder) * 0.08;
+      case PHASES.MIXED:
+        return 0.9 + (5 - this.wordOrder) * 0.15;
+      case PHASES.CHAR_ONLY:
+        return 1.5 + (10 - this.charOrder) * 0.05;
+      case PHASES.FINAL:
+        return 2.0;
+      default:
+        return 0.5;
+    }
+  }
+
+  /**
+   * Get flicker-out intensity (0-1)
+   * Controls how chaotic the flicker effect is.
+   */
+  getFlickerOutIntensity() {
+    switch (this.phase) {
+      case PHASES.VERBATIM:
+        return 0.2; // subtle, clean
+      case PHASES.WORD_MARKOV:
+        return 0.25 + (10 - this.wordOrder) * 0.05;
+      case PHASES.MIXED:
+        return 0.5 + (5 - this.wordOrder) * 0.08;
+      case PHASES.CHAR_ONLY:
+        return 0.8 + (10 - this.charOrder) * 0.02;
+      case PHASES.FINAL:
+        return 1.0;
+      default:
+        return 0.3;
+    }
+  }
+
+  /**
+   * Get character scatter probability during flicker-out
+   * Higher = more characters disappear independently
+   */
+  getCharacterScatter() {
+    switch (this.phase) {
+      case PHASES.VERBATIM:
+        return 0;
+      case PHASES.WORD_MARKOV:
+        return (10 - this.wordOrder) * 0.03;
+      case PHASES.MIXED:
+        return 0.15 + (5 - this.wordOrder) * 0.08;
+      case PHASES.CHAR_ONLY:
+        return 0.5 + (10 - this.charOrder) * 0.05;
+      case PHASES.FINAL:
+        return 0.9;
+      default:
+        return 0;
+    }
+  }
+
+  /**
+   * Get position jitter amount during flicker-out (in pixels)
+   */
+  getFlickerJitter() {
+    switch (this.phase) {
+      case PHASES.VERBATIM:
+        return 0;
+      case PHASES.WORD_MARKOV:
+        return (10 - this.wordOrder) * 0.5;
+      case PHASES.MIXED:
+        return 3 + (5 - this.wordOrder) * 1;
+      case PHASES.CHAR_ONLY:
+        return 8 + (10 - this.charOrder) * 0.5;
+      case PHASES.FINAL:
+        return 12;
+      default:
+        return 0;
+    }
+  }
+
   /**
    * Get step count (how many steps from start)
    */
