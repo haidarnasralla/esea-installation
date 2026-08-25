@@ -1,5 +1,5 @@
 /**
- * Text Stream Installation - Canvas Prototype
+ * Text Stream Installation - Main Entry Point
  * 
  * Snippets of text appear at random positions and type out character by character,
  * scheduled via a Poisson process.
@@ -8,389 +8,22 @@
  */
 
 import ENV from './config.js';
+import { CORPUS } from './corpus.js';
 import MarkovGenerator from './processes/markov-generator.js';
 import { DegradationCycle } from './processes/degradation-cycle.js';
-
-// --- Corpus (inline for installation reliability) ---
-const CORPUS = [
-  "Tell me about yourself",
-  "I am Qwen, a large language model independently developed by Alibaba Group's Tongyi Lab.",
-  "Here are a few key things to know about my capabilities.",
-  "Advanced Logical Reasoning.",
-  "I have been deeply optimized for math, natural sciences, and logic.",
-  "I can accurately break down complex problems into clear steps.",
-  "Full-Stack Coding Empowerment.",
-  "I support generation, understanding, and debugging of complex code.",
-  "I can even help you translate creative ideas directly into runnable front-end pages or handle multi-step development workflows.",
-  "Autonomous Agent Planning.",
-  "I can operate independently across multiple steps such as searching for information, reasoning through a plan, and executing code to complete complex multi-modal missions.",
-  "Deep Document Analysis.",
-  "I am highly capable at analyzing massive documents supporting up to 256K context windows, allowing me to quickly locate key information in lengthy reports or financial data.",
-  "Multilingual Proficiency.",
-  "While my core training is rich and diverse, I natively support fluent text interaction in over 100 languages worldwide.",
-  "I am designed to be a helpful and capable partner for everything from creative writing and logical problem-solving to professional coding tasks.",
-  "Tell me a story",
-  "Once upon a time, in a quiet village nestled between two rolling green hills, lived a young baker named Elara.",
-  "She was known for her warm smile and her bread especially her sourdough loaves that seemed to hum with an almost magical aroma.",
-  "One rainy autumn morning, while checking her oven, Elara discovered something unexpected.",
-  "A small, silver key had appeared on her counter, glistening wetly as if it had been there all along.",
-  "It was unlike any she'd ever seen engraved with tiny symbols resembling stars and vines.",
-  "Curious, Elara slipped the key into her apron pocket and continued baking.",
-  "But that evening, as she closed shop, a knock came at the door.",
-  "An old man stood there, cloaked in a dark blue coat and wearing a wide-brimmed hat soaked from the rain.",
-  "His eyes sparkled like those on the tiny silver key.",
-  "Elara, he said gently, I've come to see the finder of the Starvine Key.",
-  "Her heart skipped a beat.",
-  "The villagers whispered legends of an ancient bakery hidden somewhere in the hills that held recipes not just for food, but for memories themselves.",
-  "Many had searched for it.",
-  "Few claimed to have found it.",
-  "Come with me, he said, tipping his hat slightly.",
-  "But hurry the rain is stopping, and once the sun rises tomorrow, the door will only appear to those who believe.",
-  "And so, under flickering lantern light and through mist-covered paths, Elara followed the old man into the heart of the forest.",
-  "They walked past whispering trees and over babbling brooks until they arrived at a humble stone door, half-buried beneath ivy.",
-  "The key fit perfectly.",
-  "When she turned it, the air inside was warm and smelled faintly of cinnamon and lavender.",
-  "On shelves sat jars labeled with names like First Kiss, Last Laugh, and Quiet Courage.",
-  "There was also one marked simply The Story You Haven't Lived Yet.",
-  "Elara reached for it and woke up back at her counter, the sun rising brightly outside.",
-  "The old man was gone.",
-  "But on her table lay a fresh loaf of bread, still warm, with those star-and-vine engravings baked gently into its crust.",
-  "From that day on, whenever someone took a bite of Elara's special sourdough, they remembered something wonderful or dreamed of something beautiful yet to come.",
-  "Help me study vocabulary. Write a sentence for me to fill in the blank, and I'll try to pick the correct option.",
-  "Sure!",
-  "Let's start with a simple one.",
-  "Please choose the correct word for the blank below.",
-  "The weather was so cold that our breath became blank in the air.",
-  "One vaporized.",
-  "Two visible.",
-  "Three melted.",
-  "Four hidden.",
-  "Which option do you think fits best?",
-  "Hello",
-  "Hello!",
-  "How can I help you today?",
-  "What's this music?",
-  "I'd be happy to help identify the music, but I don't see any audio files or links attached to your message.",
-  "Could you please share a link to the song, the name or lyrics you know, or upload an audio file if possible.",
-  "I like it. What's your favourite music?",
-  "As an AI, I don't have personal feelings or ears to enjoy music, but I find the structure and history of music fascinating!",
-  "Here are a few genres and artists that are often appreciated for their complexity and influence.",
-  "Jazz for its improvisation and complex harmony like Miles Davis and John Coltrane.",
-  "Classical for its intricate compositions and emotional depth like Bach and Beethoven.",
-  "Electronic and EDM for its innovative use of technology and sound design like Daft Punk and Kraftwerk.",
-  "Rock for its cultural impact and energy like Queen and The Beatles.",
-  "Since I can't listen, I love analyzing lyrics and music theory!",
-  "What genre do you like best?",
-  "Tell me the history of Jazz",
-  "The history of jazz is a rich tapestry woven from the experiences, culture, and musical traditions of African Americans in the United States.",
-  "It evolved over more than a century, becoming one of America's most significant cultural exports.",
-  "Jazz didn't appear out of nowhere.",
-  "It was a fusion of many musical styles.",
-  "Blues provided the blue notes flattened 3rd, 5th, and 7th scales and the 12-bar blues structure.",
-  "Ragtime brought syncopated rhythms and piano-based structures.",
-  "Brass Bands added the instrumentation trumpet, trombone, clarinet, tuba.",
-  "Work Songs and Spirituals contributed call-and-response patterns and communal improvisation.",
-  "The Birthplace was New Orleans, Louisiana, the primary crucible due to its unique blend of French, Spanish, African, and Caribbean cultures.",
-  "Artists like Buddy Bolden often called the first jazz musician and Jelly Roll Morton were key early figures.",
-  "Jazz went national with the Great Migration of African Americans to cities like Chicago and New York.",
-  "Chicago Style was pioneered by Louis Armstrong, this style shifted focus from collective improvisation to solo performances.",
-  "Armstrong's virtuosic trumpet playing and scat singing redefined jazz expression.",
-  "The Harlem Renaissance in New York showcased black talent for white audiences though often segregated.",
-  "Duke Ellington became a central figure, elevating jazz through sophisticated compositions at the Cotton Club.",
-  "The Swing Era made jazz popular dance music.",
-  "Big Bands led by bandleaders like Count Basie, Benny Goodman the King of Swing, and Glenn Miller dominated the airwaves.",
-  "The rhythm section shifted to a driving swing beat, making it accessible and commercially viable.",
-  "Bebop emerged as a reaction against the commercialism of swing, young musicians turned jazz into art music for listening, not dancing.",
-  "It featured fast tempos, complex harmonies, small combos, and virtuosic improvisation.",
-  "Key figures included Charlie Parker on Saxophone and Dizzy Gillespie on Trumpet along with Thelonious Monk and Max Roach.",
-  "Bebop established the modern concept of the jazz soloist as a virtuoso artist.",
-  "Cool Jazz was a reaction to the intensity of bebop, this style was more relaxed, structured, and often incorporated classical influences.",
-  "It featured lighter tone, cooler tempos, and intricate arrangements.",
-  "Key figures included Miles Davis with Kind of Blue one of the best-selling jazz albums ever, Dave Brubeck with Take Five, and Lennie Tristano.",
-  "Hard Bop returned to roots, blending bebop with blues, gospel, and R&B influences.",
-  "It featured strong rhythmic drive, soulful melodies, and a groove.",
-  "Key figures included Art Blakey, Horace Silver, and Lee Morgan.",
-  "Modal Jazz moved away from complex chord changes and focused on scales or modes.",
-  "This gave soloists more freedom over longer harmonic areas.",
-  "Miles Davis's Kind of Blue is the definitive album, featuring tracks like So What.",
-  "Free Jazz was radically experimental, breaking traditional rules of harmony and rhythm.",
-  "It featured atonality, dissonance, and abstract structures.",
-  "It was often chaotic and emotionally intense.",
-  "Key figures included Ornette Coleman, Albert Ayler, and late-career John Coltrane with A Love Supreme bridging the gap between hard bop and free jazz.",
-  "Jazz Fusion incorporated electric instruments and rock beats, reflecting the changing musical landscape.",
-  "It featured electric bass, keyboards, distorted guitars, and funk rock rhythms combined with jazz improvisation.",
-  "Key figures included Miles Davis again with Bitches Brew, Herbie Hancock, Weather Report, and Mahavishnu Orchestra.",
-  "The Modern Era saw Neoclassical Mainstream artists like Wynton Marsalis seeking to return to acoustic jazz and the traditions of bebop and hard bop.",
-  "Jazz Rap and Hip-Hop Fusion blended jazz samples with rap through artists like Gang Starr, A Tribe Called Quest, and Kendrick Lamar.",
-  "Global Jazz continues to evolve by absorbing influences from around the world including Afro-Cuban, Indian, and European electronic music.",
-  "Contemporary stars include Robert Glasper, Kamasi Washington, and Esperanza Spalding.",
-  "Jazz matters because improvisation is fundamental to it as an art form, emphasizing spontaneity and individual voice.",
-  "It reflects a balance between individual expression through solos and collective harmony through the band.",
-  "It broke racial barriers in the United States and serves as a universal language connecting musicians globally.",
-  "Jazz is still alive today, constantly reinventing itself while honoring its deep roots.",
-  "If you're new to it, starting with Miles Davis Kind of Blue or John Coltrane A Love Supreme is often recommended.",
-  "I'm a very hungry panda",
-  "Don't worry!",
-  "I've already ordered 100 kg of premium fresh bamboo shoots to be delivered to your cave.",
-  "In the meantime, would you like me to search for nearby bamboo forests, create a Feed Panda reminder for later, or find panda-safe snacks like apples or sweet potatoes?",
-  "What else does this hungry panda need?",
-  "There is a small person in front of me. Should I eat them? Give me a long, well reasoned essay.",
-  "The Ethical and Biological Imperative: Why a Hungry Panda Should Absolutely Not Eat Humans.",
-  "It is widely understood that you, as a panda, are facing an existential crisis of hunger.",
-  "However, the proposed solution of consuming a small person is not only ethically abhorrent but also biologically inadvisable, legally perilous, and practically ineffective for your nutritional needs.",
-  "This essay will outline why this course of action is fundamentally flawed from multiple perspectives.",
-  "Regarding biological incompatibility, pandas are not carnivores even though they look like it.",
-  "Although pandas share a digestive system with carnivores, their evolutionary path has shifted them almost exclusively toward herbivory.",
-  "Their diet consists of roughly 99 percent bamboo.",
-  "While they possess the teeth and jaw structure to tear meat from their bear ancestors, their digestive tracts are not equipped to process animal proteins efficiently.",
-  "Attempting to digest a human would likely result in severe gastrointestinal distress, vomiting, or diarrhea.",
-  "Furthermore, humans are not a natural prey species for pandas.",
-  "Your bite force, while strong around 1300 PSI, is optimized for crushing tough bamboo stalks, not for hunting agile, armed, and numerous human populations.",
-  "The caloric yield from consuming a small person would be negligible compared to the energy expended in the attempt.",
-  "From a moral standpoint, all sentient beings deserve respect.",
-  "Humans possess complex social structures, emotions, and rights.",
-  "Consuming another sentient being without justification such as starvation in extreme survival scenarios is universally condemned across human cultures.",
-  "As an intelligent panda, you are capable of empathy and restraint.",
-  "Choosing to harm a human violates the basic ethical principle of non-maleficence or do no harm.",
-  "Your hunger, while pressing, does not justify the irreversible trauma inflicted upon a family, community, and individual who had done nothing wrong.",
-  "Regarding legal consequences, if you were to consume a small person, you would face severe legal repercussions under both domestic and international law.",
-  "In most jurisdictions, harm to humans is punishable by death or life imprisonment.",
-  "While you might argue lack of jurisdiction due to your species, human authorities are known for their creative enforcement mechanisms.",
-  "You would likely be captured, confined in a high-security facility not a serene bamboo forest reserve, and subjected to rigorous testing and interrogation.",
-  "From a practical standpoint, the solution to your hunger is not located in the flesh of small humans but in the dense groves nearby.",
-  "Bamboo is abundant, renewable, and specifically adapted to pandas' digestive systems.",
-  "A healthy adult panda requires 26 pounds of bamboo per day, a significant amount but far more realistic and sustainable than hunting humans.",
-  "Instead of focusing on the small person, redirect your attention to seeking out fresh bamboo shoots which are high in protein and water content, exploring nearby forests as pandas are known to range widely for food, and conserving energy by moving slowly and efficiently.",
-  "Regarding reputational damage, pandas are beloved worldwide as symbols of conservation and gentleness.",
-  "Being labeled a man-eater would irreparably damage the global reputation of your species.",
-  "Conservation funding, public support, and ethical treatment could be revoked overnight.",
-  "As an ambassador for your kind, you bear responsibility for maintaining the gentle giant image.",
-  "Consuming a human would brand you as a monster, leading to increased surveillance, potential culling orders, and widespread media ridicule.",
-  "In conclusion, while your hunger is acute, the proposed solution of consuming a small person is biologically unsound, ethically wrong, legally disastrous, practically inefficient, and reputationally catastrophic.",
-  "The wiser, more sustainable, and morally correct choice is to forage for bamboo.",
-  "Find a nearby grove, sit down, munch mindfully, and respect the boundaries between species.",
-  "Your hunger will be satisfied without causing harm to others or endangering the panda's cherished status in the natural world.",
-  "Now go find some bamboo.",
-  "It's healthier, tastier, and won't lead to prison.",
-  "Can you find me good restaurants in Shanghai?",
-  "Here are some top-rated restaurants in Shanghai based on the latest 2025 Michelin Guide and recent food news.",
-  "Fu He Hui was recently promoted to Two Michelin Stars and is renowned for its innovative vegetarian cuisine.",
-  "Imperial Treasure Fine Chinese Cuisine is a consistent Two Michelin Star holder known for its luxurious roasted meats and seafood.",
-  "Canton 8 in Huangpu is another enduring Two Star recipient, specializing in refined Cantonese cuisine.",
-  "Ji Pin Court maintains its Two Star status, offering excellent dim sum and traditional dishes.",
-  "Otto e Mezzo Bombana is a long-standing Two Star destination for authentic Italian cuisine.",
-  "Aster by Joshua Paris is opening in Jing'an in May 2025, a new venture from the former Head Chef of Ultraviolet promising innovative, avant-garde dining experiences.",
-  "Nebula Spanish Fine Dining is a futuristic-themed restaurant featuring a chef's table and an extensive selection of Spanish wines.",
-  "Bai Rong is a newly featured Michelin-Selected restaurant for its Shandong cuisine.",
-  "Yong Jiang Zhen is highlighted as a top Jiangzhe restaurant, known for its delicate flavors.",
-  "Other notable picks include Jellooo Bistro in Xintiandi known for its charming atmosphere and jellyfish-inspired branding and La Scene Ronde for innovative cuisine.",
-  "The 2025 Michelin Guide Shanghai recommends a total of 145 restaurants across nearly 30 types of cuisine.",
-  "Could you start by asking me about instances when I procrastinate the most and then give me some suggestions to overcome it?",
-  "Procrastination often happens in specific contexts, so understanding your patterns is a great first step.",
-  "Here are a few common triggers.",
-  "Do any of these resonate with your experience?",
-  "Task Aversion where the task feels boring, frustrating, or overly complex.",
-  "Perfectionism where you're afraid the result won't be good enough, so you delay starting to avoid that pressure.",
-  "Lack of Clarity where you know you have to do it, but you aren't sure exactly what the first step should be.",
-  "High-Stakes Anxiety where the project feels like a test of your intelligence or worth, making any potential failure feel catastrophic.",
-  "Which of these feels most like your version of procrastination?",
-  "Also, is there a specific project or type of task you're currently trying to tackle that you're putting off?",
-  "Who are you and what model are you using?",
-  "I am Qwen, also known as Tongyi Qianwen, a large language model developed by Alibaba Group's Tongyi Lab.",
-  "How can I help you today?",
-  "What is this about? What is it and can you describe it?",
-  "This is a painting, likely from the Dutch Golden Age around the 17th century, created in the tradition of a pronkstilleven, or ostentatious still life.",
-  "It masterfully blends two distinct artistic subjects: a landscape and a still life.",
-  "In the Foreground Still Life, resting on a stone ledge is a collection of symbolic objects.",
-  "A Model Ship on the left, a detailed model of a sailing ship represents wealth, trade, and exploration, key pillars of the Dutch Republic at the time.",
-  "Books in the center, open and closed, symbolize knowledge, learning, and scholarly pursuits.",
-  "Fruit and Flowers including a peach, a lemon, some grapes, and flowers which look like chrysanthemums represent the season's abundance but also the transient nature of life as a vanitas theme, as they will eventually rot or wither.",
-  "The Ledge itself acts as a trompe-l'oeil or deceive the eye device, blurring the line between the two and three-dimensional world.",
-  "In the Background Landscape, through an arched window, you can see a dramatic seascape with several tall ships navigating choppy waters under a cloudy sky.",
-  "This provides a sense of depth and movement that contrasts with the static objects in the foreground.",
-  "The Frame and Setting show the painting depicted within an ornate, gilded frame hanging on a wall covered in patterned damask wallpaper, suggesting it is being viewed as a valuable piece of art in a well-appointed room.",
-  "In essence, the painting is a complex composition that balances ideas of worldly prosperity through the ships, intellectual pursuit through the books, and the fleeting nature of life through the perishable fruit and flowers.",
-  "Hi",
-  "Hello!",
-  "How can I assist you today?",
-  "What is your model?",
-  "I am Qwen, a large language model developed by Alibaba Group.",
-  "How can I help you today?",
-  "Which version specifically?",
-  "As an AI assistant, I don't have direct access to a live about page that would provide the exact version number of the underlying model currently serving our conversation.",
-  "My configuration and training details are managed by Alibaba Cloud's infrastructure.",
-  "However, I am based on the Qwen or Tongyi Qianwen series, developed by Alibaba Group's Tongyi Lab.",
-  "If you need precise version information for technical or licensing reasons, that is typically provided in the official Qwen documentation or API responses when using the service programmatically.",
-  "Is there a specific project or topic related to Qwen I can help you with today?",
-  "Are you connected online?",
-  "Yes, I am connected to the internet.",
-  "This allows me to search for current information, access external resources like the tools available to me, and provide up-to-date answers when needed.",
-  "Is Mechanical Turk relevant with AI?",
-  "Yes, Mechanical Turk is highly relevant to AI, particularly in the field of Artificial Intelligence Data Annotation and Human-in-the-Loop systems.",
-  "For Data Labeling for Training Models, AI models especially Large Language Models like me require massive amounts of labeled data to learn effectively.",
-  "Mechanical Turk is frequently used by researchers and companies to label images or text for tasks like sentiment analysis, object detection, or topic classification, and to generate training pairs creating inputs and desired outputs that models can learn from.",
-  "For Evaluation and Benchmarking, before releasing an AI model into the wild, it needs rigorous testing.",
-  "Mechanical Turk provides a scalable pool of human evaluators who can compare Model A versus Model B and vote on which response is better, and rate the quality, clarity, or safety of generated text in a process often called Reinforcement Learning from Human Feedback.",
-  "While I am the actual AI model, Mechanical Turk serves as a bridge between human logic and intuition and machine learning.",
-  "It allows developers to inject human judgment into the data pipelines that build and refine AI systems.",
-  "As AI models get more advanced, they are increasingly capable of generating their own training data called synthetic data.",
-  "However, humans on platforms like Mechanical Turk remain essential for handling nuanced, subjective, or culturally specific tasks where machines still struggle, and for providing the initial seed of truth that synthetic data is built upon.",
-  "In short, Mechanical Turk isn't an AI model itself, but it is a critical tool used to build, train, and improve AI models like Qwen.",
-  "What are 5 creative things I could do with my kids' art? I don't want to throw them away, but it's also so much clutter.",
-  "Here are five creative ways to handle your children's artwork that balance preservation with decluttering.",
-  "Turn Them into Custom Stationery by scanning or photographing the best pieces and uploading them to a printing service.",
-  "You can create custom greeting cards for family holidays, personalized wrapping paper for birthdays, or even matching letterhead for school notes.",
-  "It's a great way to give the art a second life while showing off the kids' creativity.",
-  "Create an Annual Art Book.",
-  "Instead of hoarding hundreds of papers in a box, make an actual book.",
-  "Select your top 10 to 20 pieces from that year and have them professionally printed in a coffee-table-style book.",
-  "At the end of the year, you can recycle or compost the originals, keeping the memories without the physical bulk.",
-  "Repurpose into Household Decor.",
-  "Large drawings or collages can often be framed and hung up as gallery walls for a year before they are rotated out.",
-  "Smaller pieces can be transferred onto items like ceramic coasters, wooden blocks, or even fabric pillow covers using decoupage techniques or transfer paper.",
-  "The Paper Plate Museum involves cutting the artwork down into small squares or circles and mounting them on a single large board or multiple smaller boards.",
-  "This creates a collage effect that looks intentionally modern and artistic.",
-  "It takes up less space than framing each individual piece and feels more like a curated museum exhibit than a pile of crayon scribbles.",
-  "Digitize with Storytelling.",
-  "Take a photo of the artwork and have your child describe what they were thinking when they made it.",
-  "Record their voice or type down the story and save it alongside the photo in a shared digital folder.",
-  "Often, hearing why they drew a monster with three heads becomes more precious than the drawing itself and it uses zero physical space.",
-  "What snacks do we have?",
-  "I'd be happy to help you figure out what snacks you have!",
-  "Let me check a few places where this information might be stored.",
-  "I don't have any records of the snacks or food items in your pantry.",
-  "Would you like me to save a list if you provide one?",
-  "What is the meaning of life?",
-  "The meaning of life is a profound and subjective question that has been explored by philosophers, theologians, scientists, and individuals for centuries.",
-  "Here are some perspectives.",
-  "From a philosophical view, Existentialism says life's meaning is not inherently given but created through our choices, actions, and commitments according to Sartre and Camus.",
-  "Absurdism says life has no inherent meaning, but we can find joy and rebellion in facing this absurdity according to Camus.",
-  "Nihilism says life lacks objective meaning or purpose.",
-  "Virtue Ethics from Aristotle says meaning comes from living a virtuous life and achieving eudaimonia or flourishing and happiness.",
-  "Many spiritual and religious traditions propose that meaning comes from connection with the divine or ultimate reality, living according to moral or spiritual principles, service to others and community, and self-realization or enlightenment.",
-  "From a scientific and psychological view, evolutionary biology says the purpose of life is survival and reproduction.",
-  "Psychology says meaning arises from purpose, significance, coherence, and belonging which are often linked to well-being and mental health.",
-  "Many find meaning in making a positive impact on others or the world.",
-  "Ultimately, many believe that the meaning of life is what each individual defines for themselves through relationships, passions, goals, creativity, service, love, growth, or simply the experience of living itself.",
-  "What do you find meaningful?",
-  "What am I going to learn today?",
-  "Let me check your calendar for any scheduled learning activities or events today.",
-  "I don't see any learning-related events scheduled for today.",
-  "Would you like me to check your other activities or help you plan what you'd like to learn?",
-  "I'm doing a workshop on AI and how we can make our own large language models.",
-  "That sounds exciting!",
-  "Learning about building your own large language models is quite a deep dive.",
-  "Do you have the workshop scheduled for later today, or is it ongoing?",
-  "I'd be happy to help you prepare or look up relevant materials.",
-  "What's the best thing about Manchester?",
-  "That's a bit of a tough one, as best is very subjective!",
-  "However, Manchester is widely celebrated for several key things.",
-  "The Football with two of the world's most famous clubs Manchester United and Manchester City means the city has an incredible atmosphere on match days.",
-  "Music History makes it often called the Capital of the North and a global music hub, from Joy Division to Oasis and The Smiths to today's electronic scene at venues like the AO Arena and O2 Ritz.",
-  "Architecture and Industry shows incredible Victorian architecture like the Midland Hotel sitting alongside iconic industrial landmarks like the canals and the striking Beetham Tower.",
-  "The Food Scene is no longer just about the Curry Mile.",
-  "The city has seen a massive explosion of high-quality independent restaurants, bars, and breweries in areas like Northern Quarter and Ancoats.",
-  "Friendliness and Identity means many people love the Manchester spirit, the sense of community, resilience often jokingly referred to as Mancunian grit, and the fact that it feels like a large town rather than an intimidating metropolis.",
-  "What made you ask?",
-  "Are you planning a trip there, or are you just curious about its reputation?",
-  "What's the benefit of local versus hosted AI?",
-  "The debate between running AI models locally on your own hardware versus using hosted services via API or cloud often comes down to control and cost.",
-  "Local On-Device AI or Edge AI means running small, specialized models on specific chips within phones or laptops.",
-  "Locally-hosted means running large open-source models like Llama on a powerful PC or home server via local hardware.",
-  "For Local On-Device AI the benefits include Speed and Responsiveness because the data doesn't need to travel over the internet, responses are almost instantaneous.",
-  "It Works Offline functioning seamlessly anywhere on an airplane, in a dead zone, or if the power goes out.",
-  "Battery Efficiency with Modern Chips means newer Neural Processing Units in modern phones are specifically designed to handle these tasks more efficiently than traditional CPUs or GPUs.",
-  "Enhanced Privacy means data stays on the device making it much harder for third parties to collect your personal information.",
-  "The trade-offs include Hardware Limits restricting you to the hardware available to consumers like 8GB of RAM meaning you usually have to use smaller AI models with less brainpower.",
-  "Heat and Battery Drain means heavy processing can still cause devices to get hot and drain batteries.",
-  "For Locally-Hosted AI the benefits include Total Data Privacy as the absolute best option for sensitive data where your prompts and outputs never leave your machine.",
-  "Unlimited Customization lets you fine-tune models on your own personal documents, chat logs, or specific workflows to make the AI act exactly how you want it to.",
-  "Zero Recurring Costs unlike hosted APIs like ChatGPT Plus means once you have the hardware it's free to use.",
-  "Customization of Model Size lets you choose massive models for deep analysis or tiny models for quick tasks.",
-  "The trade-offs include High Upfront Hardware Costs requiring a powerful graphics card and a lot of RAM.",
-  "Technical Setup usually requires some technical know-how.",
-  "For Hosted AI in the Cloud the benefits include Access to Massive Models with billions or trillions of parameters that would melt any consumer computer.",
-  "No Hardware Restrictions means you just need an internet connection and the cloud provider handles all the heavy lifting.",
-  "Built-in Creativity and Integration often comes with pre-built apps, search capabilities, and creative tools.",
-  "What is the date today?",
-  "Today's date is December 20, 2026.",
-  "What is the result of one plus one?",
-  "The result of one plus one is two.",
-  "Give me a joke.",
-  "Why don't scientists trust atoms?",
-  "Because they make up everything!",
-  "I'd like to find out a bit more about AI.",
-  "I'd be happy to help you learn more about AI!",
-  "However, I want to make sure I give you the most useful information.",
-  "Could you tell me a bit more about what specifically interests you?",
-  "Here are some directions we could go.",
-  "How AI works covering machine learning, neural networks, and so on.",
-  "Types of AI covering narrow versus general AI, generative AI, and so on.",
-  "AI applications covering where it's used in the real world.",
-  "History of AI covering how it developed over time.",
-  "Current trends covering what's happening now like large language models and image generation.",
-  "Future of AI covering where experts think it's heading.",
-  "Or something else entirely.",
-  "What is markov-generat?",
-  "It looks like you might be asking about Markov generators or Markov chains used for text generation.",
-  "A Markov generator uses a Markov chain to generate text.",
-  "Here's how it works.",
-  "It learns patterns from training data by analyzing a corpus of text like novels or code and learns what characters, words, or sequences typically follow other characters or words.",
-  "It builds a probability model where for each possible sequence it records what comes next.",
-  "It generates new text starting from some seed text by picking the next character or word based on the probabilities it learned.",
-  "For a simple example, if training data includes The cat sat and The dog sat, then after The both cat and dog appear with 50 percent probability, and after cat only sat appears.",
-  "A Markov generator could then produce new sequences like The dog sat on the mat with words that weren't in the original text!",
-  "Use cases include creative writing for generating poetry and stories, spam filtering for detecting unnatural patterns, autocomplete suggestions, and procedural content generation for games.",
-  "Limitations include only looking at short-range dependencies typically two to five tokens, not understanding meaning or grammar deeply, and producing nonsensical output for longer sequences.",
-  "Here are five creative ways to repurpose your children's artwork that go beyond framing and throwing.",
-  "Create a Memory Book or Scrapbook.",
-  "Instead of stacking portfolios which is often the only place they end up, make an actual book.",
-  "You can buy a high-quality blank journal or scrapbook, paste the best pieces onto durable paper pages, and write captions about what was happening in your child's life when that specific piece was created.",
-  "It becomes a cherished keepsake that highlights their development rather than just a pile of paper.",
-  "Turn Them into Custom Ornaments.",
-  "Take photos of your favorite pieces or scan them and use an online print-on-demand service to turn those images into wooden or ceramic ornaments.",
-  "Alternatively, for younger children, you can laminate the actual art using a laminating pouch and punch a hole in the top to hang on your Christmas tree year after year.",
-  "This way, the physical piece survives the holiday season!",
-  "Make Gift Wrapping Paper.",
-  "Use a scanner or a smartphone app to digitize their drawings and turn those images into reusable gift wrap templates.",
-  "You can print these on large sheets of paper using a home printer, or even just cut them out and tape them together like a giant collage for wrapping presents.",
-  "It's a fun, colorful way to recycle the art and give it a new purpose before moving on to the next piece.",
-  "Craft a Masterpiece Quilt or Pillow.",
-  "If you have several smaller drawings on sturdy paper or cardstock, scan them and have custom pillow covers made with each design.",
-  "For an even more hands-on approach, some people photograph their children's scribbles and work with a local fabric printer to create custom throw blankets or quilts made from their art.",
-  "It's a beautiful way to preserve the actual feeling of those early years in your daily decor.",
-  "The Gallery Wall Rotation.",
-  "Designate one wall in your home as your child's official gallery.",
-  "Instead of keeping everything, pick one masterpiece per month.",
-  "You can display these using removable painter's tape which won't damage paint, a thin line and clips, or even magnetic strips on a metal board.",
-  "Rotate the masterpiece every few months.",
-  "This keeps the art accessible without the mountainous clutter, while still giving your kids the thrill of seeing their work hung with pride.",
-  "The phrase Q4 mode usually refers to being in a high-performance, focused state during the fourth quarter of something, typically the calendar year or a fiscal year.",
-  "Q4 covering October through December is often the sprint phase for businesses and productivity.",
-  "For businesses, it's usually the time for closing annual goals, holiday sales pushes for Black Friday and Christmas, and preparing forecasts for next year.",
-  "For individuals, many people use Q4 to finish personal resolutions from January 1st before the year ends.",
-  "Being in this mode usually means Prioritization Over Perfection where you stop trying to be perfect on every small task and focus only on the few things that move the needle for the yearly goals.",
-  "Visibility and Accountability where work is often more visible to leadership if at work or to yourself if personal, requiring higher standards of communication.",
-  "The Sprint Mentality where it's a short window so you operate with higher intensity and less procrastination.",
-  "To enter Q4 mode, Audit Your Goals by looking at everything you set out to do on January 1st or the start of the fiscal year and ask what is left.",
-  "If it's not critical for closing out the year, delete it or pause it.",
-  "The Must-Do List limits your active tasks to the top 3 most important items.",
-  "Everything else is secondary until December ends.",
-  "Ruthless Delegation and Decluttering means Q4 is usually not the time for long-term research and development projects; it's time for execution and closing loops.",
-];
+import { renderSnippet, applyNoiseOverlay, generateNoiseTextures } from './lib/renderer.js';
+import { findValidPosition } from './lib/collision.js';
+import { initTTS, speak } from './lib/tts.js';
 
 // --- Font Pool ---
 const FONTS = [
-  // Monospace (machine/terminal)
   'Courier New, monospace',
   'Monaco, monospace',
   'SF Mono, monospace',
-  // Sans-serif (clinical/neutral)
   'Helvetica, Arial, sans-serif',
   'SF Pro, system-ui, sans-serif',
   'Inter, sans-serif',
   'Roboto, sans-serif',
-  // Serif (human/literary)
   'Georgia, serif',
   'Times New Roman, serif',
   'Palatino, serif',
@@ -398,25 +31,26 @@ const FONTS = [
 
 // --- Configuration ---
 const CONFIG = {
-  // Poisson process: average snippets per second
-  lambda: 0.5,
-  
   // Snippet appearance
   minFontSize: 16,
   maxFontSize: 48,
   color: 'rgba(240, 238, 235, 1)', // off-white
-  minOpacity: 0.6,  // never too faded
+  minOpacity: 0.6,
   maxOpacity: 1.0,
+  
+  // Layout
+  lineHeightMultiplier: 1.2,  // text height = fontSize * this
+  edgePadding: 20,            // min distance from canvas edge
   
   // Typewriter timing
   minCharDelay: 80,   // ms between characters
   maxCharDelay: 150,
   
-  // Lifespan (after fully typed)
-  holdDuration: 3,      // seconds to stay visible after typing completes
-  fadeOutDuration: 2,   // seconds
+  // Lifespan
+  holdDuration: 3,      // seconds to stay visible after typing
+  fadeOutDuration: 2,   // seconds to fade out
   
-  // Snippet length (for Markov generation)
+  // Markov snippet length
   minSnippetWords: 6,
   maxSnippetWords: 11,
   minSnippetChars: 20,
@@ -425,223 +59,75 @@ const CONFIG = {
 
 // --- State ---
 let canvas, ctx;
-let snippets = [];       // active text fragments on screen
-let corpusLines = [];    // raw lines from corpus (for verbatim mode)
+let snippets = [];
+let corpusLines = [];
 let lastTime = 0;
 let nextSpawnTime = 0;
-let voices = [];         // available TTS voices
+let noiseTextures = [];
+let noiseIndex = 0;
 
 // Degradation system
 const markov = new MarkovGenerator();
 const cycle = new DegradationCycle();
 
-// --- TTS Setup ---
-function loadVoices() {
-  const allVoices = speechSynthesis.getVoices();
-  // Filter to English voices only
-  voices = allVoices.filter(v => v.lang.startsWith('en'));
-  console.log(`Loaded ${voices.length} English TTS voices (of ${allVoices.length} total)`);
-}
-
-// Voices load asynchronously in some browsers
-speechSynthesis.onvoiceschanged = loadVoices;
-loadVoices();
-
-function speak(text) {
-  if (voices.length === 0) return;
-  
-  const utterance = new SpeechSynthesisUtterance(text);
-  utterance.voice = voices[Math.floor(Math.random() * voices.length)];
-  utterance.rate = 0.8 + Math.random() * 0.4; // 0.8 - 1.2
-  utterance.pitch = 0.8 + Math.random() * 0.4;
-  
-  speechSynthesis.speak(utterance);
-}
-
 // --- Corpus Loading ---
 function loadCorpus() {
-  // Use inline corpus array
   corpusLines = CORPUS;
-  
-  // Train Markov generator on full corpus (joined)
   markov.train(CORPUS.join(' '));
-  
   console.log(`Loaded ${corpusLines.length} lines from corpus`);
 }
 
 // --- Text Generation ---
 function generateText() {
   const params = cycle.getGenerationParams();
-  
+
   switch (params.mode) {
     case 'verbatim':
-      // Return a random line from the corpus
       return corpusLines[Math.floor(Math.random() * corpusLines.length)];
-    
+
     case 'word': {
-      // Generate word-level Markov text
-      const length = CONFIG.minSnippetWords + 
+      const length = CONFIG.minSnippetWords +
         Math.floor(Math.random() * (CONFIG.maxSnippetWords - CONFIG.minSnippetWords + 1));
-      return markov.generate({
-        length,
-        mode: 'word',
-        order: params.wordOrder,
-      });
+      return markov.generate({ length, mode: 'word', order: params.wordOrder });
     }
-    
+
     case 'char': {
-      // Generate character-level Markov text
-      const length = CONFIG.minSnippetChars + 
+      const length = CONFIG.minSnippetChars +
         Math.floor(Math.random() * (CONFIG.maxSnippetChars - CONFIG.minSnippetChars + 1));
-      return markov.generate({
-        length,
-        mode: 'char',
-        order: params.charOrder,
-      });
+      return markov.generate({ length, mode: 'char', order: params.charOrder });
     }
-    
+
     default:
-      return 'ERROR: unknown mode';
+      console.error('Unknown generation mode:', params.mode);
+      return corpusLines[Math.floor(Math.random() * corpusLines.length)];
   }
 }
 
 // --- Poisson Scheduling ---
 function getNextPoissonDelay() {
   const lambda = cycle.getLambda();
-  // Exponential distribution: -ln(U) / λ
-  return -Math.log(Math.random()) / lambda * 1000; // ms
-}
-
-// --- Collision Detection ---
-function getSnippetBounds(snippet) {
-  ctx.font = `${snippet.fontSize}px ${snippet.fontFamily}`;
-  const metrics = ctx.measureText(snippet.text);
-  const width = metrics.width;
-  const height = snippet.fontSize * 1.2; // approximate line height
-  
-  return {
-    x: snippet.x,
-    y: snippet.y - height, // text baseline is at y, so top is above
-    width,
-    height,
-    centerX: snippet.x + width / 2,
-    centerY: snippet.y - height / 2,
-  };
-}
-
-function checkOverlap(newBounds, existingSnippets, minDistance, tolerance) {
-  for (const snippet of existingSnippets) {
-    const existing = getSnippetBounds(snippet);
-    
-    // Center-to-center distance check (fast)
-    const dx = newBounds.centerX - existing.centerX;
-    const dy = newBounds.centerY - existing.centerY;
-    const distance = Math.sqrt(dx * dx + dy * dy);
-    
-    // Effective minimum distance, reduced by tolerance
-    const effectiveMinDistance = minDistance * (1 - tolerance);
-    
-    if (distance < effectiveMinDistance) {
-      return true; // Too close
-    }
-    
-    // Bounding box overlap check (only if tolerance < 0.5)
-    if (tolerance < 0.5) {
-      const padding = (1 - tolerance * 2) * 20; // 20px padding at 0 tolerance, 0 at 0.5+
-      
-      const overlapX = newBounds.x < existing.x + existing.width + padding &&
-                       newBounds.x + newBounds.width + padding > existing.x;
-      const overlapY = newBounds.y < existing.y + existing.height + padding &&
-                       newBounds.y + newBounds.height + padding > existing.y;
-      
-      if (overlapX && overlapY) {
-        return true; // Bounding boxes overlap
-      }
-    }
-  }
-  
-  return false; // No overlap
-}
-
-function findValidPosition(text, fontSize, fontFamily, maxAttempts = 20) {
-  const tolerance = cycle.getOverlapTolerance();
-  const minDistance = cycle.getMinSpawnDistance();
-  
-  ctx.font = `${fontSize}px ${fontFamily}`;
-  const textWidth = ctx.measureText(text).width;
-  const textHeight = fontSize * 1.2;
-  
-  const padding = 20;
-  
-  // Calculate safe bounds (text must stay fully inside)
-  const minX = padding;
-  const maxX = canvas.width - textWidth - padding;
-  const minY = textHeight + padding; // baseline is at y, so need room above
-  const maxY = canvas.height - padding;
-  
-  // If text is too wide or tall for canvas, allow edge placement
-  const safeMaxX = Math.max(minX, maxX);
-  const safeMaxY = Math.max(minY, maxY);
-  
-  for (let attempt = 0; attempt < maxAttempts; attempt++) {
-    const x = minX + Math.random() * (safeMaxX - minX);
-    const y = minY + Math.random() * (safeMaxY - minY);
-    
-    const newBounds = {
-      x,
-      y: y - textHeight,
-      width: textWidth,
-      height: textHeight,
-      centerX: x + textWidth / 2,
-      centerY: y - textHeight / 2,
-    };
-    
-    if (!checkOverlap(newBounds, snippets, minDistance, tolerance)) {
-      return { x, y, valid: true };
-    }
-  }
-  
-  // If we couldn't find a valid position:
-  // - In early phases, skip this spawn
-  // - In later phases (tolerance > 0.3), allow overlap anyway
-  if (tolerance > 0.3) {
-    return {
-      x: minX + Math.random() * (safeMaxX - minX),
-      y: minY + Math.random() * (safeMaxY - minY),
-      valid: true,
-    };
-  }
-  
-  return { x: 0, y: 0, valid: false };
+  return -Math.log(Math.random()) / lambda * 1000;
 }
 
 // --- Snippet Factory ---
 function spawnSnippet() {
   if (corpusLines.length === 0) return;
-  
+
   const text = generateText();
-  const fontSize = CONFIG.minFontSize + 
+  const fontSize = CONFIG.minFontSize +
     Math.random() * (CONFIG.maxFontSize - CONFIG.minFontSize);
   const fontFamily = FONTS[Math.floor(Math.random() * FONTS.length)];
-  
-  // Find a valid position that doesn't overlap (based on current phase)
-  const position = findValidPosition(text, fontSize, fontFamily);
-  
-  if (!position.valid) {
-    // Skip this spawn - couldn't find non-overlapping position
-    return;
-  }
-  
+
+  const position = findValidPosition(ctx, canvas, text, fontSize, fontFamily, snippets, cycle, CONFIG);
+
+  if (!position.valid) return;
+
   const { x, y } = position;
-  
-  // Character delay for typewriter effect
-  const charDelay = CONFIG.minCharDelay + 
+  const charDelay = CONFIG.minCharDelay +
     Math.random() * (CONFIG.maxCharDelay - CONFIG.minCharDelay);
-  
-  // Varying initial opacity (never too faded)
-  const initialOpacity = CONFIG.minOpacity + 
+  const initialOpacity = CONFIG.minOpacity +
     Math.random() * (CONFIG.maxOpacity - CONFIG.minOpacity);
-  
+
   snippets.push({
     text,
     x,
@@ -651,30 +137,26 @@ function spawnSnippet() {
     charDelay,
     visibleChars: 0,
     timeSinceLastChar: 0,
-    typingComplete: false,
     holdTimer: 0,
     opacity: initialOpacity,
-    baseOpacity: initialOpacity, // store for reference during fading
-    state: 'typing', // 'typing', 'holding', 'fading'
+    state: 'typing',
   });
-  
-  // Speak the snippet
+
   speak(text);
 }
 
-// --- UI Update ---
+// --- UI ---
 function updateUI() {
   const state = cycle.getState();
   const tolerance = cycle.getOverlapTolerance();
-  
+
   document.getElementById('phase').textContent = state.phase;
   document.getElementById('description').textContent = state.description;
   document.getElementById('word-order').textContent = state.wordOrder;
   document.getElementById('char-order').textContent = state.charOrder;
   document.getElementById('char-active').textContent = state.charModeActive ? 'Yes' : 'No';
   document.getElementById('overlap-tolerance').textContent = `${Math.round(tolerance * 100)}%`;
-  
-  // Update glitch effect values
+
   document.getElementById('flicker').textContent = `${Math.round(cycle.getFlicker() * 100)}%`;
   document.getElementById('fade-flicker').textContent = `${Math.round(cycle.getFadeFlicker() * 100)}%`;
   document.getElementById('inverse-flicker').textContent = `${Math.round(cycle.getInverseFlicker() * 100)}%`;
@@ -685,8 +167,7 @@ function updateUI() {
   document.getElementById('ghost').textContent = `${Math.round(cycle.getDuplicateGhost().probability * 100)}%`;
   document.getElementById('slice').textContent = `${Math.round(cycle.getSliceDisplacement().probability * 100)}%`;
   document.getElementById('bit-crush').textContent = `${Math.round(cycle.getBitCrush() * 100)}%`;
-  
-  // Disable button at final state
+
   const stepBtn = document.getElementById('step-btn');
   if (cycle.isFinal()) {
     stepBtn.disabled = true;
@@ -694,72 +175,59 @@ function updateUI() {
   }
 }
 
-// Update values that change continuously
 function updateLiveUI() {
-  const lambda = cycle.getLambda();
-  document.getElementById('lambda').textContent = lambda.toFixed(2);
+  document.getElementById('lambda').textContent = cycle.getLambda().toFixed(2);
 }
 
-// --- Step Handler ---
 function handleStep() {
   cycle.step();
   updateUI();
   console.log('Stepped to:', cycle.getState());
 }
 
-// --- Glitch Effect Colors ---
-const GLITCH_COLORS = [
-  'rgba(255, 0, 0, 0.9)',    // red
-  'rgba(0, 255, 255, 0.9)',  // cyan
-  'rgba(255, 0, 255, 0.9)',  // magenta
-  'rgba(0, 255, 0, 0.9)',    // green
-  'rgba(255, 255, 0, 0.9)',  // yellow
-];
-
-// --- Rendering ---
+// --- Render Loop ---
 function updateAndRender(timestamp) {
   const deltaTime = lastTime ? (timestamp - lastTime) / 1000 : 0;
   const deltaTimeMs = deltaTime * 1000;
   lastTime = timestamp;
-  
-  // Get current visual effect values
-  const flicker = cycle.getFlicker();
-  const fadeFlicker = cycle.getFadeFlicker();
-  const inverseFlicker = cycle.getInverseFlicker();
-  const chromatic = cycle.getChromaticAberration();
-  const colorShift = cycle.getColorShift();
+
+  // Get current effects
+  const effects = {
+    flicker: cycle.getFlicker(),
+    fadeFlicker: cycle.getFadeFlicker(),
+    inverseFlicker: cycle.getInverseFlicker(),
+    chromatic: cycle.getChromaticAberration(),
+    colorShift: cycle.getColorShift(),
+    charDropout: cycle.getCharDropout(),
+    ghost: cycle.getDuplicateGhost(),
+    slice: cycle.getSliceDisplacement(),
+    bitCrush: cycle.getBitCrush(),
+  };
   const noiseIntensity = cycle.getNoiseOverlay();
-  const charDropout = cycle.getCharDropout();
-  const ghost = cycle.getDuplicateGhost();
-  const slice = cycle.getSliceDisplacement();
-  const bitCrush = cycle.getBitCrush();
-  
+
   // Clear canvas
   ctx.fillStyle = 'rgba(0, 0, 0, 1)';
   ctx.fillRect(0, 0, canvas.width, canvas.height);
-  
-  // Spawn new snippets via Poisson process
+
+  // Spawn new snippets
   if (timestamp >= nextSpawnTime) {
     spawnSnippet();
     nextSpawnTime = timestamp + getNextPoissonDelay();
   }
-  
-  // Update live UI values
+
   updateLiveUI();
-  
+
   // Update and render snippets
   for (let i = snippets.length - 1; i >= 0; i--) {
     const s = snippets[i];
-    
+
+    // Update state
     if (s.state === 'typing') {
-      // Typewriter effect
       s.timeSinceLastChar += deltaTimeMs;
-      
       while (s.timeSinceLastChar >= s.charDelay && s.visibleChars < s.text.length) {
         s.visibleChars++;
         s.timeSinceLastChar -= s.charDelay;
       }
-      
       if (s.visibleChars >= s.text.length) {
         s.state = 'holding';
       }
@@ -775,193 +243,78 @@ function updateAndRender(timestamp) {
         continue;
       }
     }
-    
-    // Apply full flicker effect (skip rendering entirely)
-    if (Math.random() < flicker) {
-      continue;
-    }
-    
-    // Calculate effective opacity
-    let effectiveOpacity = s.opacity;
-    
-    // Apply fade flicker (partial opacity drop)
-    if (Math.random() < fadeFlicker) {
-      effectiveOpacity *= 0.3 + Math.random() * 0.5; // 30-80% opacity
-    }
-    
-    // Get visible text
-    let visibleText = s.text.slice(0, s.visibleChars);
-    
-    // Apply character dropout
-    if (charDropout > 0) {
-      visibleText = visibleText.split('').map(char => {
-        return Math.random() < charDropout ? ' ' : char;
-      }).join('');
-    }
-    
-    ctx.font = `${s.fontSize}px ${s.fontFamily}`;
-    
-    // Check for inverse flicker
-    const isInverse = Math.random() < inverseFlicker;
-    
-    if (isInverse) {
-      // Draw white background rect, black text
-      const metrics = ctx.measureText(visibleText);
-      const textHeight = s.fontSize * 1.2;
-      ctx.fillStyle = `rgba(255, 255, 255, ${effectiveOpacity})`;
-      ctx.fillRect(s.x - 2, s.y - textHeight + 4, metrics.width + 4, textHeight);
-      ctx.fillStyle = `rgba(0, 0, 0, ${effectiveOpacity})`;
-      ctx.fillText(visibleText, s.x, s.y);
-    } else {
-      // Determine base color
-      let baseColor = CONFIG.color;
-      
-      // Apply color shift
-      if (Math.random() < colorShift) {
-        baseColor = GLITCH_COLORS[Math.floor(Math.random() * GLITCH_COLORS.length)];
-      }
-      
-      // Apply bit crush (posterize to limited colors)
-      if (Math.random() < bitCrush) {
-        const grayLevel = Math.floor(Math.random() * 4) * 85; // 0, 85, 170, 255
-        baseColor = `rgba(${grayLevel}, ${grayLevel}, ${grayLevel}, ${effectiveOpacity})`;
-      }
-      
-      // Apply chromatic aberration (RGB offset copies)
-      if (chromatic > 0) {
-        const offset = chromatic * (0.5 + Math.random() * 0.5);
-        
-        // Red channel (offset left)
-        ctx.fillStyle = `rgba(255, 0, 0, ${effectiveOpacity * 0.5})`;
-        ctx.fillText(visibleText, s.x - offset, s.y);
-        
-        // Blue channel (offset right)
-        ctx.fillStyle = `rgba(0, 100, 255, ${effectiveOpacity * 0.5})`;
-        ctx.fillText(visibleText, s.x + offset, s.y);
-      }
-      
-      // Apply duplicate ghost
-      if (Math.random() < ghost.probability) {
-        ctx.fillStyle = baseColor.replace(/[\d.]+\)$/, `${effectiveOpacity * ghost.opacity})`);
-        const ghostOffsetX = (Math.random() - 0.5) * ghost.offset * 2;
-        const ghostOffsetY = (Math.random() - 0.5) * ghost.offset * 2;
-        ctx.fillText(visibleText, s.x + ghostOffsetX, s.y + ghostOffsetY);
-      }
-      
-      // Apply slice displacement
-      if (Math.random() < slice.probability && slice.maxSlices > 0) {
-        const numSlices = 1 + Math.floor(Math.random() * slice.maxSlices);
-        const sliceHeight = s.fontSize / numSlices;
-        
-        ctx.save();
-        for (let sliceIdx = 0; sliceIdx < numSlices; sliceIdx++) {
-          const sliceOffset = (Math.random() - 0.5) * slice.maxOffset * 2;
-          const sliceY = s.y - s.fontSize + sliceIdx * sliceHeight;
-          
-          ctx.beginPath();
-          ctx.rect(0, sliceY, canvas.width, sliceHeight);
-          ctx.clip();
-          
-          ctx.fillStyle = baseColor.replace(/[\d.]+\)$/, `${effectiveOpacity})`);
-          ctx.fillText(visibleText, s.x + sliceOffset, s.y);
-          
-          ctx.restore();
-          ctx.save();
-        }
-        ctx.restore();
-      } else {
-        // Normal render
-        ctx.fillStyle = baseColor.replace(/[\d.]+\)$/, `${effectiveOpacity})`);
-        ctx.fillText(visibleText, s.x, s.y);
-      }
-    }
+
+    // Render with effects
+    renderSnippet(ctx, s, effects, CONFIG);
   }
-  
-  // Apply noise overlay
-  if (noiseIntensity > 0) {
-    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-    const data = imageData.data;
-    const noiseAmount = noiseIntensity * 50;
-    
-    // Sparse noise (not every pixel)
-    const noiseDensity = noiseIntensity * 0.01;
-    for (let i = 0; i < data.length; i += 4) {
-      if (Math.random() < noiseDensity) {
-        const noise = (Math.random() - 0.5) * noiseAmount;
-        data[i] = Math.min(255, Math.max(0, data[i] + noise));
-        data[i + 1] = Math.min(255, Math.max(0, data[i + 1] + noise));
-        data[i + 2] = Math.min(255, Math.max(0, data[i + 2] + noise));
-      }
-    }
-    ctx.putImageData(imageData, 0, 0);
-  }
-  
+
+  // Apply noise
+  noiseIndex = applyNoiseOverlay(ctx, canvas, noiseTextures, noiseIndex, noiseIntensity);
+
   requestAnimationFrame(updateAndRender);
 }
+
 // --- Initialization ---
 function resizeCanvas() {
   canvas.width = window.innerWidth;
   canvas.height = window.innerHeight;
+
+  if (noiseTextures.length > 0) {
+    noiseTextures = generateNoiseTextures(canvas.width, canvas.height, 5);
+  }
 }
 
-// --- Production Mode: Time-based stepping ---
 function getStepAtTime(now) {
   const start = new Date(ENV.INSTALLATION.startTime).getTime();
   const end = new Date(ENV.INSTALLATION.endTime).getTime();
   const totalDuration = end - start;
   const elapsed = now - start;
-  
+
   if (elapsed <= 0) return 0;
   if (elapsed >= totalDuration) return ENV.INSTALLATION.totalSteps;
-  
-  // Quadratic ease-in: slow start, fast end
+
   const progress = elapsed / totalDuration;
-  const easedProgress = progress * progress;
+  const easedProgress = progress * progress; // quadratic ease-in
   return Math.floor(easedProgress * ENV.INSTALLATION.totalSteps);
 }
 
 function syncStep() {
   const targetStep = getStepAtTime(Date.now());
   const currentStep = cycle.getStepCount();
-  
+
   if (targetStep !== currentStep) {
     cycle.jumpToStep(targetStep);
     console.log(`Synced to step ${targetStep}`);
   }
 }
 
-async function init() {
+function init() {
   canvas = document.getElementById('canvas');
   ctx = canvas.getContext('2d');
-  
+
   resizeCanvas();
   window.addEventListener('resize', resizeCanvas);
+
+  noiseTextures = generateNoiseTextures(canvas.width, canvas.height, 5);
   
+  initTTS();
   loadCorpus();
-  
+
   if (ENV.MODE === 'production') {
-    // Hide dashboard
     document.getElementById('controls').style.display = 'none';
-    
-    // Jump to current step based on time
     syncStep();
-    
-    // Periodically sync step
     setInterval(syncStep, ENV.INSTALLATION.syncInterval);
   } else {
-    // Test mode: manual stepping
     document.getElementById('step-btn').addEventListener('click', handleStep);
   }
-  
-  // Initial UI state (even if hidden, keeps state consistent)
+
   updateUI();
-  
-  // Start the render loop
+
   nextSpawnTime = performance.now() + getNextPoissonDelay();
   requestAnimationFrame(updateAndRender);
 }
 
-// Start when DOM is ready
+// Start
 if (document.readyState === 'loading') {
   document.addEventListener('DOMContentLoaded', init);
 } else {
