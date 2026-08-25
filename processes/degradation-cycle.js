@@ -222,28 +222,92 @@ class DegradationCycle {
     }
   }
 
-  // --- Spawn Rate ---
+  // --- Spawn Rate & Scheduling ---
 
   /**
-   * Get lambda (spawn rate) for current phase
+   * Get spawn mode for current phase
+   * @returns {'serial'|'overlap'|'poisson'}
+   *   - serial: one snippet at a time, wait for death + pause
+   *   - overlap: allow multiple, but capped, with minimum inter-spawn delay
+   *   - poisson: stochastic arrivals, capped by maxConcurrent
+   */
+  getSpawnMode() {
+    switch (this.phase) {
+      case PHASES.VERBATIM:
+        return 'serial';
+      case PHASES.WORD_MARKOV:
+        // Orders 10-9: serial. Orders 8-6: overlap.
+        return this.wordOrder >= 9 ? 'serial' : 'overlap';
+      case PHASES.MIXED:
+      case PHASES.CHAR_ONLY:
+      case PHASES.FINAL:
+        return 'poisson';
+      default:
+        return 'serial';
+    }
+  }
+
+  /**
+   * Get maximum concurrent snippets allowed on screen
+   */
+  getMaxConcurrent() {
+    switch (this.phase) {
+      case PHASES.VERBATIM:
+        return 1;
+      case PHASES.WORD_MARKOV:
+        if (this.wordOrder >= 9) return 1;  // serial
+        if (this.wordOrder === 8) return 2;
+        if (this.wordOrder === 7) return 2;
+        return 3; // order 6
+      case PHASES.MIXED:
+        // 5 at word order 5, up to 12 at word order 1
+        return 5 + Math.round((5 - this.wordOrder) * 1.75);
+      case PHASES.CHAR_ONLY:
+        return 15;
+      case PHASES.FINAL:
+        return 20;
+      default:
+        return 1;
+    }
+  }
+
+  /**
+   * Get pause duration (seconds) between spawns in serial/overlap modes.
+   * In serial mode: pause after previous snippet dies.
+   * In overlap mode: minimum inter-spawn delay.
+   */
+  getSerialPause() {
+    switch (this.phase) {
+      case PHASES.VERBATIM:
+        return 0.8;
+      case PHASES.WORD_MARKOV:
+        if (this.wordOrder === 10) return 0.3;
+        if (this.wordOrder === 9) return 0.2;
+        if (this.wordOrder === 8) return 0.1;
+        return 0; // orders 7-6
+      default:
+        return 0;
+    }
+  }
+
+  /**
+   * Get lambda (spawn rate) for Poisson mode.
+   * Only meaningful when getSpawnMode() === 'poisson'.
+   * Peaks in late mixed, slight pullback toward final.
    */
   getLambda() {
     switch (this.phase) {
-      case PHASES.VERBATIM:
-        return 0.25;
-      case PHASES.WORD_MARKOV:
-        // 0.3 at order 10, up to 0.5 at order 6
-        return 0.3 + (10 - this.wordOrder) * 0.05;
       case PHASES.MIXED:
-        // 0.6 at word order 5, up to 0.9 at word order 1
-        return 0.6 + (5 - this.wordOrder) * 0.075;
+        // 0.4 at word order 5, up to 1.0 at word order 1
+        return 0.4 + (5 - this.wordOrder) * 0.15;
       case PHASES.CHAR_ONLY:
-        // 1.0 at order 10, up to 1.3 at order 1
-        return 1.0 + (10 - this.charOrder) * 0.033;
+        // 0.95 at order 10, drifts down slightly to 0.85 at order 1
+        return 0.95 - (10 - this.charOrder) * 0.011;
       case PHASES.FINAL:
-        return 1.5;
+        return 0.85;
       default:
-        return 0.25;
+        // Shouldn't be called in serial/overlap modes, but fallback
+        return 0.3;
     }
   }
 
@@ -561,6 +625,174 @@ class DegradationCycle {
       default:
         return 0;
     }
+  }
+
+  // --- Voice Degradation (SAM TTS) ---
+
+  /**
+   * Get voice mix for hybrid TTS.
+   * Controls the balance between LPC (human) and SAM (synthetic) voices.
+   * 
+   * @returns {object} { lpcProbability, primaryVoice }
+   *   lpcProbability: 0-1, chance of using LPC for this phrase
+   *   primaryVoice: null (random) or specific voice name
+   */
+  getVoiceMix() {
+    const step = this.getStepCount();
+    const progress = step / 20;
+
+    // Early: 100% LPC
+    // Mid: Gradually introduce SAM
+    // Late: 100% SAM
+    let lpcProbability;
+    
+    if (progress < 0.2) {
+      // Verbatim and early word markov: pure LPC
+      lpcProbability = 1.0;
+    } else if (progress < 0.5) {
+      // Word markov mid: LPC dominant, occasional SAM
+      lpcProbability = 1.0 - (progress - 0.2) * 1.0; // 1.0 → 0.7
+    } else if (progress < 0.8) {
+      // Mixed mode: SAM taking over
+      lpcProbability = 0.7 - (progress - 0.5) * 2.0; // 0.7 → 0.1
+    } else {
+      // Char only / final: pure SAM
+      lpcProbability = Math.max(0, 0.1 - (progress - 0.8) * 0.5);
+    }
+
+    return {
+      lpcProbability,
+      primaryVoice: null, // Let hybrid-tts pick randomly
+    };
+  }
+
+  /**
+   * Get voice parameters for SAM TTS.
+   * 
+   * Early: Natural-ish, varied male/female voices (random per snippet)
+   * Mid: Converging toward robotic monotone
+   * Late: Extreme/glitchy parameters
+   * 
+   * @returns {object} { speed, pitch, throat, mouth, glitch }
+   */
+  getVoiceParams() {
+    // Calculate degradation progress (0 = verbatim, 1 = final)
+    const step = this.getStepCount();
+    const progress = step / 20;
+
+    // --- Base voice ranges ---
+    // Natural human-like range (early)
+    // SAM pitch: higher = higher voice. Speed: lower = slower/more deliberate
+    const humanVoices = {
+      // Female-ish: higher pitch, tighter throat/mouth, varied speed
+      female: { speed: [58, 75], pitch: [100, 150], throat: [120, 145], mouth: [128, 155] },
+      // Male-ish: medium pitch, more open throat/mouth
+      male: { speed: [62, 82], pitch: [70, 100], throat: [115, 140], mouth: [110, 135] },
+      // Child-ish: highest pitch, small mouth
+      child: { speed: [55, 70], pitch: [140, 180], throat: [130, 155], mouth: [140, 170] },
+    };
+    
+    // Robotic target (mid-late)
+    const robotVoice = { speed: 92, pitch: 64, throat: 180, mouth: 180 };
+    
+    // Glitchy extremes (final)
+    const glitchRange = {
+      speed: [40, 150],
+      pitch: [20, 200],
+      throat: [80, 255],
+      mouth: [80, 255],
+    };
+
+    let params;
+
+    if (progress < 0.3) {
+      // Early: Random human voice (female, male, or child - weighted toward higher pitches)
+      const roll = Math.random();
+      let voice;
+      if (roll < 0.4) {
+        voice = humanVoices.female;
+      } else if (roll < 0.7) {
+        voice = humanVoices.male;
+      } else {
+        voice = humanVoices.child;
+      }
+      params = {
+        speed: this._randomInRange(voice.speed),
+        pitch: this._randomInRange(voice.pitch),
+        throat: this._randomInRange(voice.throat),
+        mouth: this._randomInRange(voice.mouth),
+      };
+    } else if (progress < 0.7) {
+      // Mid: Blend toward robot voice
+      const blendFactor = (progress - 0.3) / 0.4; // 0 at 0.3, 1 at 0.7
+      const roll = Math.random();
+      let voice;
+      if (roll < 0.4) {
+        voice = humanVoices.female;
+      } else if (roll < 0.7) {
+        voice = humanVoices.male;
+      } else {
+        voice = humanVoices.child;
+      }
+      
+      // Start with human, blend toward robot
+      const humanParams = {
+        speed: this._randomInRange(voice.speed),
+        pitch: this._randomInRange(voice.pitch),
+        throat: this._randomInRange(voice.throat),
+        mouth: this._randomInRange(voice.mouth),
+      };
+      
+      params = {
+        speed: Math.round(this._lerp(humanParams.speed, robotVoice.speed, blendFactor)),
+        pitch: Math.round(this._lerp(humanParams.pitch, robotVoice.pitch, blendFactor)),
+        throat: Math.round(this._lerp(humanParams.throat, robotVoice.throat, blendFactor)),
+        mouth: Math.round(this._lerp(humanParams.mouth, robotVoice.mouth, blendFactor)),
+      };
+    } else {
+      // Late: Robot with increasing glitch randomness
+      const glitchFactor = (progress - 0.7) / 0.3; // 0 at 0.7, 1 at 1.0
+      
+      // Base is robot, add random glitch deviation
+      params = {
+        speed: Math.round(this._lerp(robotVoice.speed, this._randomInRange(glitchRange.speed), glitchFactor)),
+        pitch: Math.round(this._lerp(robotVoice.pitch, this._randomInRange(glitchRange.pitch), glitchFactor)),
+        throat: Math.round(this._lerp(robotVoice.throat, this._randomInRange(glitchRange.throat), glitchFactor)),
+        mouth: Math.round(this._lerp(robotVoice.mouth, this._randomInRange(glitchRange.mouth), glitchFactor)),
+      };
+    }
+
+    // Clamp to valid SAM ranges
+    params.speed = Math.max(1, Math.min(255, params.speed));
+    params.pitch = Math.max(1, Math.min(255, params.pitch));
+    params.throat = Math.max(1, Math.min(255, params.throat));
+    params.mouth = Math.max(1, Math.min(255, params.mouth));
+
+    // Add glitch metadata for audio effects
+    params.glitch = {
+      // Probability of audio stutter/repeat
+      stutterChance: progress > 0.5 ? (progress - 0.5) * 0.4 : 0,
+      // Probability of pitch drift mid-word
+      pitchDriftChance: progress > 0.6 ? (progress - 0.6) * 0.5 : 0,
+      // Amount of noise to mix in (0-1)
+      noiseLevel: progress > 0.4 ? (progress - 0.4) * 0.3 : 0,
+    };
+
+    return params;
+  }
+
+  /**
+   * Linear interpolation helper
+   */
+  _lerp(a, b, t) {
+    return a + (b - a) * t;
+  }
+
+  /**
+   * Random value in range [min, max]
+   */
+  _randomInRange([min, max]) {
+    return min + Math.random() * (max - min);
   }
 
   /**

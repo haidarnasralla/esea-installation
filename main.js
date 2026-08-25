@@ -103,10 +103,48 @@ function generateText() {
   }
 }
 
-// --- Poisson Scheduling ---
+// --- Spawn Scheduling ---
+let lastSnippetDiedAt = 0;  // timestamp when last snippet was removed
+let lastSpawnTime = 0;      // timestamp of most recent spawn
+
 function getNextPoissonDelay() {
   const lambda = cycle.getLambda();
   return -Math.log(Math.random()) / lambda * 1000;
+}
+
+/**
+ * Determine whether we should spawn a snippet this frame.
+ * Replaces the old "if timestamp >= nextSpawnTime" check.
+ */
+function shouldSpawn(timestamp) {
+  const mode = cycle.getSpawnMode();
+  const maxConcurrent = cycle.getMaxConcurrent();
+  const activeCount = snippets.length;
+
+  switch (mode) {
+    case 'serial': {
+      // Only spawn when 0 active snippets and pause has elapsed
+      if (activeCount > 0) return false;
+      const pause = cycle.getSerialPause() * 1000; // ms
+      return (timestamp - lastSnippetDiedAt) >= pause;
+    }
+
+    case 'overlap': {
+      // Spawn if under cap and minimum inter-spawn delay has passed
+      if (activeCount >= maxConcurrent) return false;
+      const pause = cycle.getSerialPause() * 1000;
+      return (timestamp - lastSpawnTime) >= pause;
+    }
+
+    case 'poisson': {
+      // Stochastic arrivals, but respect concurrent cap
+      if (activeCount >= maxConcurrent) return false;
+      return timestamp >= nextSpawnTime;
+    }
+
+    default:
+      return false;
+  }
 }
 
 // --- Snippet Factory ---
@@ -146,7 +184,26 @@ function spawnSnippet() {
 
   // Calculate typing duration and speak synced to it
   const typingDuration = (text.length * charDelay) / 1000; // convert ms to seconds
-  speakOverDuration(text, typingDuration);
+  
+  // Get voice parameters from degradation cycle
+  const voiceMix = cycle.getVoiceMix();
+  const samVoiceParams = cycle.getVoiceParams();
+  
+  // Calculate text width for center position
+  ctx.font = `${fontSize}px ${fontFamily}`;
+  const textWidth = ctx.measureText(text).width;
+  const textCenterX = x + textWidth / 2;
+  
+  // Calculate stereo pan from text center (-1 = left, 1 = right)
+  // Clamp to valid range
+  const panRaw = (textCenterX / canvas.width) * 2 - 1;
+  const pan = Math.max(-1, Math.min(1, panRaw));
+  
+  // Calculate volume from font size (larger text = louder)
+  // Map fontSize 16-48 to volume 0.4-1.0
+  const volumeScale = 0.4 + ((fontSize - CONFIG.minFontSize) / (CONFIG.maxFontSize - CONFIG.minFontSize)) * 0.6;
+  
+  speakOverDuration(text, typingDuration, { voiceMix, samVoiceParams, pan, volume: volumeScale });
 }
 
 // --- UI ---
@@ -186,7 +243,15 @@ function updateUI() {
 }
 
 function updateLiveUI() {
-  document.getElementById('lambda').textContent = cycle.getLambda().toFixed(2);
+  const spawnMode = cycle.getSpawnMode();
+  document.getElementById('spawn-mode').textContent = spawnMode;
+  document.getElementById('max-concurrent').textContent = cycle.getMaxConcurrent();
+  
+  if (spawnMode === 'poisson') {
+    document.getElementById('lambda').textContent = cycle.getLambda().toFixed(2);
+  } else {
+    document.getElementById('lambda').textContent = `pause ${cycle.getSerialPause().toFixed(1)}s`;
+  }
 }
 
 function handleStep() {
@@ -220,9 +285,13 @@ function updateAndRender(timestamp) {
   ctx.fillRect(0, 0, canvas.width, canvas.height);
 
   // Spawn new snippets
-  if (timestamp >= nextSpawnTime) {
+  if (shouldSpawn(timestamp)) {
     spawnSnippet();
-    nextSpawnTime = timestamp + getNextPoissonDelay();
+    lastSpawnTime = timestamp;
+    // Schedule next Poisson arrival (only matters in poisson mode)
+    if (cycle.getSpawnMode() === 'poisson') {
+      nextSpawnTime = timestamp + getNextPoissonDelay();
+    }
   }
 
   updateLiveUI();
@@ -250,6 +319,7 @@ function updateAndRender(timestamp) {
       s.flickerTimer += deltaTime;
       if (s.flickerTimer >= s.flickerDuration) {
         snippets.splice(i, 1);
+        lastSnippetDiedAt = timestamp;
         continue;
       }
     }
