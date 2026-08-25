@@ -25,11 +25,11 @@ The interaction data of workshop participants with a local chatbot is collected.
 - Random voice selection (English only)
 - Slight variation in rate and pitch
 
-## Simulating Collapse (Planned)
+## Simulating Collapse (Design Notes)
 
 Markov chain approach—more tractable than actual model training and more legible as art.
 
-### Staged Degradation
+### Original Staged Degradation Concept
 1. **Verbatim excerpts** from corpus
 2. **Sentence-level Markov** (order 4-5 words) — still coherent-ish
 3. **Word-level Markov** (order 2-3) — grammatical but nonsensical
@@ -38,7 +38,8 @@ Markov chain approach—more tractable than actual model training and more legib
 6. **Character-level Markov** (order 2-3) — phonetic mush
 7. **Character-level Markov** (order 1) — random characters
 
-Can blend outputs from adjacent stages during transitions.
+### Implemented Version
+See "Degradation Cycle (Implemented)" section below for the actual implementation, which uses a finer-grained order progression (10 → 1) and introduces a mixed mode where word and character generation coexist.
 
 ---
 
@@ -158,10 +159,11 @@ const FONTS = [
 ## Current Implementation
 
 ### Files
-- `index.html` — Fullscreen black canvas
-- `main.js` — Poisson scheduler, typewriter rendering, TTS
-- `corpus/corpus.txt` — Source text from workshop interactions
+- `index.html` — Fullscreen black canvas + control panel overlay
+- `main.js` — Poisson scheduler, typewriter rendering, TTS, degradation integration
+- `corpus/corpus.txt` — Source text (one sentence per line)
 - `processes/markov-generator.js` — Flexible n-gram generator (word and character level)
+- `processes/degradation-cycle.js` — State machine for phase progression
 
 ### Configuration (in main.js)
 ```js
@@ -173,8 +175,10 @@ const CONFIG = {
   maxCharDelay: 80,
   holdDuration: 3,       // seconds after typing completes
   fadeOutDuration: 2,
-  minSnippetWords: 3,
-  maxSnippetWords: 12,
+  minSnippetWords: 6,    // for word-level Markov
+  maxSnippetWords: 11,
+  minSnippetChars: 20,   // for character-level Markov
+  maxSnippetChars: 60,
 };
 ```
 
@@ -187,10 +191,50 @@ python3 -m http.server 8000
 
 ---
 
+## Degradation Cycle (Implemented)
+
+The text degradation now follows a one-way journey into entropy, controlled manually via a step button (timer to be added later).
+
+### Phases
+
+1. **Verbatim** — Exact lines from corpus, unchanged
+2. **Word Markov (order 10 → 6)** — Snippets of 6-11 words, order decreases by 1 each step
+3. **Mixed Mode (word 5 → 1, char 10 → 1)** — Once word order hits 5, character-level becomes available. Each snippet randomly selects between:
+   - Word-level (6-11 words) at current word order
+   - Character-level (20-60 chars) at current char order
+   - Both orders decrease by 1 each step
+   - Word-level drops out after order 1
+4. **Character Only** — Character order continues decreasing toward 1
+5. **Final State** — Character-level order 1, stays here forever (maximum entropy)
+
+### Files
+
+- `processes/degradation-cycle.js` — State machine managing phase transitions
+- `processes/markov-generator.js` — Flexible n-gram generator (word and character level)
+- `main.js` — Integrates cycle with text generation and UI
+- `index.html` — Control panel overlay showing current phase/orders
+
+### Control Panel
+
+Displays:
+- Current phase
+- Word order (10 → 1)
+- Character order (10 → 1)
+- Whether character mode is active
+- Human-readable description
+
+Press "Step →" to advance through the cycle. Button disables at final state.
+
+### Corpus Format
+
+One sentence per line in `corpus/corpus.txt`. This format works for both verbatim extraction (whole lines) and Markov training (full text).
+
+---
+
 ## Next Steps
 
-1. **Test current prototype** — Tune timing, fonts, arrival rate
-2. **Integrate Markov generator** — Stage progression from verbatim to noise
+1. ~~Integrate Markov generator~~ ✓
+2. **Add timed progression** — Replace manual stepping with configurable timer
 3. **Piper integration** — Better voices, simultaneous playback
 4. **Voice degradation** — Match audio quality to text collapse stage
 5. **Collision detection** — Prevent text overlap (or embrace it?)
