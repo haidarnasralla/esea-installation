@@ -127,8 +127,9 @@ class DegradationCycle {
 
       case PHASES.MIXED:
         // Randomly select between word and char
+        // Guard: if word order has reached 0, always use char mode
         const useChar = Math.random() < 0.5;
-        if (useChar) {
+        if (useChar || this.wordOrder <= 0) {
           return { mode: 'char', charOrder: this.charOrder };
         } else {
           return { mode: 'word', wordOrder: this.wordOrder };

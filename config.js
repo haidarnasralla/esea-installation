@@ -17,13 +17,10 @@ export default {
   
   // Production timing (only used when MODE === 'production')
   INSTALLATION: {
-    // Installation runs Tuesday 25 Aug to Saturday 29 Aug 2026
-    startDate: '2026-08-25',
-    endDate: '2026-08-29',
-    
-    // Gallery hours (degradation only progresses during these hours)
-    openHour: 10,  // 10am
-    closeHour: 17, // 5pm (7 hours per day, 35 hours total)
+    // Installation runs from Tuesday 25 Aug 5pm to Saturday 29 Aug 5pm
+    // Total duration: 96 hours (4 full days)
+    startTime: '2026-08-25T17:00:00+01:00',  // Tuesday 5pm BST
+    endTime: '2026-08-29T17:00:00+01:00',    // Saturday 5pm BST
     
     totalSteps: 20,
     syncInterval: 60000, // recalculate step every 60 seconds

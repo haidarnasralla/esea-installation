@@ -368,6 +368,8 @@ Each frame during the flicker-out phase:
 | Character Scatter | 0% | 90% | Individual chars disappear at different times |
 | Jitter | 0px | 12px | Position shake during flicker |
 
+**Note:** Flicker duration is captured at snippet spawn time, not when flickering starts. This means a snippet born at step 5 will use step-5 parameters for its death animation, even if degradation advances while it's alive. This is intentional — each snippet carries its "birth" characteristics throughout its lifecycle, creating a smoother visual blend during transitions.
+
 ### Files Modified
 - `processes/degradation-cycle.js` — Added `getFlickerOutDuration()`, `getFlickerOutIntensity()`, `getCharacterScatter()`, `getFlickerJitter()`
 - `lib/renderer.js` — Added `renderFlickerOut()` function
@@ -477,44 +479,41 @@ MODE: 'production', // dashboard hidden, time-based auto-stepping
 
 ## Time-based Auto-stepping (Implemented)
 
-Installation runs Tuesday 25 Aug → Saturday 29 Aug 2026, during gallery hours only (10am–5pm). That's 7 hours/day × 5 days = **35 total hours** of degradation.
+Installation runs continuously from **Tuesday 25 Aug 5pm → Saturday 29 Aug 5pm** (96 hours total).
 
 ### Configuration (in config.js)
 
 ```js
 INSTALLATION: {
-  startDate: '2026-08-25',  // Tuesday
-  endDate: '2026-08-29',    // Saturday
-  openHour: 10,             // 10am
-  closeHour: 17,            // 5pm
+  startTime: '2026-08-25T17:00:00+01:00',  // Tuesday 5pm BST
+  endTime: '2026-08-29T17:00:00+01:00',    // Saturday 5pm BST
   totalSteps: 20,
   syncInterval: 60000,
 }
 ```
 
-### Gallery Hours Logic
+### Timing Model
 
-Degradation only progresses during gallery hours:
-- Before 10am → frozen at previous day's closing state
-- 10am–5pm → actively progressing
-- After 5pm → frozen until next day 10am
-- Outside date range → step 0 (before) or step 20 (after)
+Simple continuous elapsed time calculation:
+- Uses ISO 8601 timestamps with timezone for reliability
+- No gallery hours complexity — degradation progresses 24/7
+- Quadratic easing (accelerating decay): `progress²` maps elapsed time to steps
+- Computer restarts automatically recalculate correct position
 
 ### Pacing (accelerating decay)
 
-Quadratic easing across 35 gallery hours. Early hours are slow, later hours accelerate.
+Quadratic easing across 96 hours. Early hours are slow, later hours accelerate.
 
-| Day | Date | Gallery Hours | Cumulative | Steps | Phase |
-|-----|------|---------------|------------|-------|-------|
-| 1 | Tue 25 | 7 | 0–7 | 0–1 | Verbatim, Word 10 |
-| 2 | Wed 26 | 7 | 7–14 | 1–3 | Word 9–8 |
-| 3 | Thu 27 | 7 | 14–21 | 3–7 | Word 7–6, Mixed begins |
-| 4 | Fri 28 | 7 | 21–28 | 7–13 | Mixed deepens |
-| 5 | Sat 29 | 7 | 28–35 | 13–20 | Char only → Final |
+| Day | Time | Cumulative Hours | Steps | Phase |
+|-----|------|------------------|-------|-------|
+| Tue | 5pm–midnight | 0–7 | 0–0 | Verbatim |
+| Wed | all day | 7–31 | 0–2 | Word 10–9 |
+| Thu | all day | 31–55 | 2–6 | Word 8–6, Mixed begins |
+| Fri | all day | 55–79 | 6–13 | Mixed deepens |
+| Sat | midnight–5pm | 79–96 | 13–20 | Char only → Final |
 
 ### Edge cases
 
-- Before Tue 25 Aug 10am → stay at step 0
+- Before Tue 25 Aug 5pm → stay at step 0
 - After Sat 29 Aug 5pm → stay at step 20 (final)
-- Outside gallery hours → stay at last step reached
 - Computer restarted → recalculates from current time

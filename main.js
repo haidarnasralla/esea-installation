@@ -74,7 +74,6 @@ const cycle = new DegradationCycle();
 function loadCorpus() {
   corpusLines = CORPUS;
   markov.train(CORPUS.join(' '));
-  console.log(`Loaded ${corpusLines.length} lines from corpus`);
 }
 
 // --- Text Generation ---
@@ -98,7 +97,6 @@ function generateText() {
     }
 
     default:
-      console.error('Unknown generation mode:', params.mode);
       return corpusLines[Math.floor(Math.random() * corpusLines.length)];
   }
 }
@@ -166,6 +164,19 @@ function spawnSnippet() {
   const initialOpacity = CONFIG.minOpacity +
     Math.random() * (CONFIG.maxOpacity - CONFIG.minOpacity);
 
+  // Pre-calculate bounds for collision detection (avoids repeated measureText calls)
+  ctx.font = `${fontSize}px ${fontFamily}`;
+  const textWidth = ctx.measureText(text).width;
+  const textHeight = fontSize * CONFIG.lineHeightMultiplier;
+  const cachedBounds = {
+    x,
+    y: y - textHeight,
+    width: textWidth,
+    height: textHeight,
+    centerX: x + textWidth / 2,
+    centerY: y - textHeight / 2,
+  };
+
   snippets.push({
     text,
     x,
@@ -177,9 +188,10 @@ function spawnSnippet() {
     timeSinceLastChar: 0,
     holdTimer: 0,
     flickerTimer: 0,        // tracks time spent flickering
-    flickerDuration: cycle.getFlickerOutDuration(),
+    flickerDuration: cycle.getFlickerOutDuration(),  // captured at spawn time for consistency
     opacity: initialOpacity,
     state: 'typing',
+    cachedBounds,  // for efficient collision detection
   });
 
   // Calculate typing duration and speak synced to it
@@ -189,13 +201,9 @@ function spawnSnippet() {
   const voiceMix = cycle.getVoiceMix();
   const samVoiceParams = cycle.getVoiceParams();
   
-  // Calculate text width for center position
-  ctx.font = `${fontSize}px ${fontFamily}`;
-  const textWidth = ctx.measureText(text).width;
-  const textCenterX = x + textWidth / 2;
-  
   // Calculate stereo pan from text center (-1 = left, 1 = right)
-  // Clamp to valid range
+  // textWidth already calculated above for cachedBounds
+  const textCenterX = x + textWidth / 2;
   const panRaw = (textCenterX / canvas.width) * 2 - 1;
   const pan = Math.max(-1, Math.min(1, panRaw));
   
@@ -257,7 +265,6 @@ function updateLiveUI() {
 function handleStep() {
   cycle.step();
   updateUI();
-  console.log('Stepped to:', cycle.getState());
 }
 
 // --- Render Loop ---
@@ -294,7 +301,10 @@ function updateAndRender(timestamp) {
     }
   }
 
-  updateLiveUI();
+  // Only update debug UI in test mode
+  if (ENV.MODE !== 'production') {
+    updateLiveUI();
+  }
 
   // Update and render snippets
   for (let i = snippets.length - 1; i >= 0; i--) {
@@ -347,73 +357,59 @@ function updateAndRender(timestamp) {
 }
 
 // --- Initialization ---
+let resizeDebounceTimeout = null;
+
 function resizeCanvas() {
   canvas.width = window.innerWidth;
   canvas.height = window.innerHeight;
 
+  // Debounce noise texture regeneration to avoid GC pressure during resize drag
   if (noiseTextures.length > 0) {
-    noiseTextures = generateNoiseTextures(canvas.width, canvas.height, 5);
+    clearTimeout(resizeDebounceTimeout);
+    resizeDebounceTimeout = setTimeout(() => {
+      noiseTextures = generateNoiseTextures(canvas.width, canvas.height, 5);
+    }, 200);
   }
 }
 
-function getElapsedGalleryHours(now) {
-  const { startDate, endDate, openHour, closeHour } = ENV.INSTALLATION;
-  const hoursPerDay = closeHour - openHour;
+function getElapsedHours(now) {
+  const { startTime, endTime } = ENV.INSTALLATION;
   
-  const start = new Date(startDate);
-  const end = new Date(endDate);
-  const current = new Date(now);
+  const start = new Date(startTime).getTime();
+  const end = new Date(endTime).getTime();
+  const current = typeof now === 'number' ? now : new Date(now).getTime();
   
-  // Set to start of day for date comparisons
-  const currentDateOnly = new Date(current.getFullYear(), current.getMonth(), current.getDate());
-  const startDateOnly = new Date(start.getFullYear(), start.getMonth(), start.getDate());
-  const endDateOnly = new Date(end.getFullYear(), end.getMonth(), end.getDate());
+  const totalDuration = end - start;
+  const elapsed = current - start;
   
   // Before installation starts
-  if (currentDateOnly < startDateOnly) return 0;
+  if (elapsed <= 0) return 0;
   
   // After installation ends
-  if (currentDateOnly > endDateOnly) {
-    const totalDays = Math.round((endDateOnly - startDateOnly) / (1000 * 60 * 60 * 24)) + 1;
-    return totalDays * hoursPerDay;
-  }
+  if (elapsed >= totalDuration) return totalDuration / (1000 * 60 * 60);
   
-  // Count full days elapsed
-  const fullDaysElapsed = Math.round((currentDateOnly - startDateOnly) / (1000 * 60 * 60 * 24));
-  let elapsed = fullDaysElapsed * hoursPerDay;
-  
-  // Add hours from today
-  const currentHour = current.getHours() + current.getMinutes() / 60;
-  
-  if (currentHour < openHour) {
-    // Before gallery opens today — no additional hours
-  } else if (currentHour >= closeHour) {
-    // After gallery closes today — add full day
-    elapsed += hoursPerDay;
-  } else {
-    // During gallery hours — add partial day
-    elapsed += currentHour - openHour;
-  }
-  
-  return elapsed;
+  return elapsed / (1000 * 60 * 60);
 }
 
 function getStepAtTime(now) {
-  const { openHour, closeHour, startDate, endDate, totalSteps } = ENV.INSTALLATION;
-  const hoursPerDay = closeHour - openHour;
+  const { startTime, endTime, totalSteps } = ENV.INSTALLATION;
   
-  const start = new Date(startDate);
-  const end = new Date(endDate);
-  const totalDays = Math.round((new Date(end) - new Date(start)) / (1000 * 60 * 60 * 24)) + 1;
-  const totalHours = totalDays * hoursPerDay;
+  const start = new Date(startTime).getTime();
+  const end = new Date(endTime).getTime();
+  const current = typeof now === 'number' ? now : new Date(now).getTime();
   
-  const elapsed = getElapsedGalleryHours(now);
+  // Before installation starts
+  if (current <= start) return 0;
   
-  if (elapsed <= 0) return 0;
-  if (elapsed >= totalHours) return totalSteps;
-
-  const progress = elapsed / totalHours;
-  const easedProgress = progress * progress; // quadratic ease-in
+  // After installation ends
+  if (current >= end) return totalSteps;
+  
+  const totalDuration = end - start;
+  const elapsed = current - start;
+  const progress = elapsed / totalDuration;
+  
+  // Quadratic ease-in for accelerating decay
+  const easedProgress = progress * progress;
   return Math.floor(easedProgress * totalSteps);
 }
 
@@ -423,7 +419,6 @@ function syncStep() {
 
   if (targetStep !== currentStep) {
     cycle.jumpToStep(targetStep);
-    console.log(`Synced to step ${targetStep}`);
   }
 }
 
