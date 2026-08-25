@@ -13,7 +13,7 @@ import MarkovGenerator from './processes/markov-generator.js';
 import { DegradationCycle } from './processes/degradation-cycle.js';
 import { renderSnippet, renderFlickerOut, applyNoiseOverlay, generateNoiseTextures } from './lib/renderer.js';
 import { findValidPosition } from './lib/collision.js';
-import { initTTS, speak } from './lib/tts.js';
+import { initTTS, speakOverDuration } from './lib/tts.js';
 
 // --- Font Pool ---
 const FONTS = [
@@ -144,7 +144,9 @@ function spawnSnippet() {
     state: 'typing',
   });
 
-  speak(text);
+  // Calculate typing duration and speak synced to it
+  const typingDuration = (text.length * charDelay) / 1000; // convert ms to seconds
+  speakOverDuration(text, typingDuration);
 }
 
 // --- UI ---

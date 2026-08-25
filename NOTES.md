@@ -12,7 +12,7 @@ The interaction data of workshop participants with a local chatbot is collected.
 - Snippets appear at random screen positions
 - Typewriter effect (character by character)
 - Random font selection from curated pool (monospace, sans-serif, serif)
-- Fade out after holding
+- Flicker-out effect when disappearing (intensity scales with degradation)
 
 ### Scheduling
 - Poisson process for snippet arrivals
@@ -21,9 +21,9 @@ The interaction data of workshop participants with a local chatbot is collected.
 - Formula: `nextDelay = -Math.log(Math.random()) / lambda * 1000`
 
 ### TTS
-- Each snippet is spoken aloud as it appears
-- Random voice selection (English only)
-- Slight variation in rate and pitch
+- Each snippet is spoken aloud using LPC synthesis (TMS5100/Speak & Spell style)
+- Speech is pre-rendered and played back synced to typing duration
+- Robotic, lo-fi aesthetic matches the installation's themes
 
 ## Simulating Collapse (Design Notes)
 
@@ -60,33 +60,28 @@ See "Degradation Cycle (Implemented)" section below for the actual implementatio
 
 ### TTS Options
 
-#### Web Speech API (current)
-Built into all modern browsers, uses OS native voices.
+#### LPC Synthesis (current)
+Custom implementation of Texas Instruments TMS5100 algorithm (Speak & Spell chip).
 
 **Pros:**
-- Zero setup, works immediately
-- Multiple voices per OS (macOS ~70+, fewer on Windows/Linux)
-- Control over rate, pitch, volume
-- Free and offline
+- Distinctive robotic aesthetic that fits the installation's themes
+- No external dependencies
+- Multiple simultaneous voices possible (Web Audio API)
+- Full control over degradation effects
+- Works offline
 
 **Cons:**
-- Voice quality varies by OS
-- Linux (Debian) defaults to espeak—very robotic
-- Chrome requires user interaction to start
-- **Cannot play multiple voices simultaneously** — utterances queue
+- Limited vocabulary (words must be LPC-encoded)
+- Unknown words use random vocabulary fragments
 
-#### Piper TTS (recommended for production)
-Lightweight neural TTS, runs on CPU, even on Raspberry Pi.
+**How it works:**
+1. Excitation: Chirp waveform (voiced) or LFSR noise (unvoiced)
+2. 10-pole lattice filter shapes the excitation
+3. Frame-based (25ms frames, 8kHz sample rate)
+4. Playback rate adjusted to sync with typing duration
 
-**Pros:**
-- Good quality voices
-- ~50MB binary, 15-100MB per voice
-- Faster than real-time on modest hardware
-- Fully offline
-
-**Cons:**
-- Separate service to run alongside the installation
-- More setup than Web Speech API
+#### Piper TTS (alternative)
+Lightweight neural TTS, runs on CPU, even on Raspberry Pi. Could be used if more natural speech is desired.
 
 **Setup:**
 ```bash
@@ -99,36 +94,6 @@ wget https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/lessac/me
 
 echo "Hello world" | ./piper --model en_US-lessac-medium.onnx --output_file test.wav
 ```
-
-**Integration options:**
-1. Run as HTTP server, fetch audio from JS
-2. Pre-generate audio for corpus snippets
-3. Node server that shells out to binary
-
-#### Linux Voice Packages
-If sticking with Web Speech API on Debian:
-```bash
-sudo apt install festival festvox-kallpc16k  # Festival
-sudo apt install espeak-ng                    # eSpeak (default, robotic)
-sudo apt install libttspico-utils             # Pico TTS (decent)
-sudo apt install flite                        # CMU Flite
-```
-
----
-
-### Simultaneous Voice Playback
-
-**Issue:** Web Speech API queues utterances—only one voice at a time.
-
-**Solutions:**
-
-1. **Web Audio API** — Generate audio buffers, play independently. Full control but requires audio files.
-
-2. **Multiple iframes** — Each has own `speechSynthesis` context. Hacky.
-
-3. **Piper + audio elements** — Generate WAV files, play as `<audio>` or via Web Audio. Multiple elements can overlap.
-
-**Recommendation:** Move to audio-file-based approach (Piper) for overlapping voices, spatialization, and effects.
 
 ---
 
@@ -165,9 +130,10 @@ const FONTS = [
 ├── main.js                       — Entry point, init, render loop
 ├── corpus.js                     — CORPUS array (inlined text)
 ├── lib/
-│   ├── renderer.js               — Rendering and glitch effects
+│   ├── renderer.js               — Rendering, glitch effects, flicker-out
 │   ├── collision.js              — Position finding, overlap detection
-│   └── tts.js                    — Speech synthesis
+│   ├── tts.js                    — Speech synthesis interface
+│   └── formant-synth.js          — LPC decoder and TMS5100 synthesizer
 └── processes/
     ├── degradation-cycle.js      — State machine for phase progression
     └── markov-generator.js       — Word and character level n-grams
@@ -193,7 +159,7 @@ const CONFIG = {
   
   // Lifespan
   holdDuration: 3,
-  fadeOutDuration: 2,
+  // flickerOutDuration controlled by DegradationCycle
   
   // Markov snippet length
   minSnippetWords: 6,
@@ -300,8 +266,91 @@ All effects scale with degradation phase, starting at 0 in verbatim and reaching
 3. ~~Visual entropy effects~~ ✓
 4. ~~Time-based auto-stepping~~ ✓
 5. ~~Modular code structure~~ ✓
-6. **Piper integration** — Better voices, simultaneous playback
-7. **Voice degradation** — Match audio quality to text collapse stage
+6. ~~Flicker-out effect~~ ✓
+7. ~~LPC speech synthesis~~ ✓
+8. **Voice degradation** — Match audio quality to text collapse stage
+9. **Piper integration** — Alternative for higher quality voices if needed
+
+---
+
+## Flicker-Out Effect (Implemented)
+
+Replaced smooth fade-out with a glitchy "flicker away" effect for text disappearance. Text now fights to stay visible before vanishing.
+
+### How It Works
+
+Each frame during the flicker-out phase:
+1. Calculate `progress` (0→1 over the duration)
+2. `visibilityThreshold = (1 - progress) * (1 - intensity * 0.3)`
+3. Roll `Math.random()` — if above threshold, skip rendering (invisible this frame)
+4. If visible: apply jitter, then either render normally or with character scatter
+5. Occasionally render ghost flashes when invisible
+
+**Key design:** Pure random each frame — no rhythmic patterns. Early in flicker-out: mostly visible with occasional dropout. Late: mostly invisible with rare flashes.
+
+### Parameters (scale with degradation phase)
+
+| Parameter | Verbatim | Final | Description |
+|-----------|----------|-------|-------------|
+| Duration | 0.4s | 2.0s | How long the flicker phase lasts |
+| Intensity | 20% | 100% | Controls visibility decay rate |
+| Character Scatter | 0% | 90% | Individual chars disappear at different times |
+| Jitter | 0px | 12px | Position shake during flicker |
+
+### Files Modified
+- `processes/degradation-cycle.js` — Added `getFlickerOutDuration()`, `getFlickerOutIntensity()`, `getCharacterScatter()`, `getFlickerJitter()`
+- `lib/renderer.js` — Added `renderFlickerOut()` function
+- `main.js` — Changed snippet state from `fading` to `flickering`
+- `index.html` — Added "Flicker-Out (Disappearance)" section to control panel
+
+---
+
+## LPC Speech Synthesis (Implemented)
+
+Replaced Web Speech API with TMS5100-style LPC synthesis (Speak & Spell chip).
+
+### How It Works
+
+1. **Excitation source:** Chirp waveform (voiced) or LFSR noise (unvoiced)
+2. **10-pole lattice filter:** Shapes excitation using reflection coefficients K1-K10
+3. **Frame-based:** Parameters update every 25ms (200 samples at 8kHz)
+4. **Vocabulary:** Actual LPC-encoded words from Speak & Spell ROM
+
+### Vocabulary Words Available
+`the`, `time`, `is`, `good`, `morning`, `six`, `eleven`, `thirty`, `am`, `pause`
+
+For unknown words, the system concatenates random fragments from the vocabulary to create "speech-like gibberish."
+
+### Typing Synchronization
+
+Speech is pre-rendered when a snippet spawns, then played back at a rate adjusted to match the typing duration:
+
+```js
+const typingDuration = (text.length * charDelay) / 1000;
+speakOverDuration(text, typingDuration);
+```
+
+The `playbackRate` of the audio buffer is set to stretch/compress the speech to match exactly how long the typewriter effect takes.
+
+### Technical Details
+
+- Sample rate: 8kHz (authentic TMS5100 rate)
+- Upsampled to native audio rate with sample-and-hold (maintains crunchy lo-fi quality)
+- Bit-reversed byte reading (matches Talkie library format)
+- Coefficient tables from original TMS5100 documentation
+
+### Files
+- `lib/formant-synth.js` — LPC decoder and synthesizer
+- `lib/tts.js` — Interface layer (`speak()`, `speakOverDuration()`)
+
+### Future: Voice Degradation
+
+The LPC synthesis opens possibilities for audio degradation matching text collapse:
+- Drift formant frequencies (vowels become ambiguous)
+- Add noise to excitation source
+- Reduce coefficient precision
+- Shorten/fragment utterances
+- Detune or corrupt filter coefficients
 
 ---
 
