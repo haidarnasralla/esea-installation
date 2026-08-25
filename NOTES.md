@@ -158,26 +158,47 @@ const FONTS = [
 
 ## Current Implementation
 
-### Files
-- `index.html` — Fullscreen black canvas + control panel overlay
-- `main.js` — Poisson scheduler, typewriter rendering, TTS, degradation integration
-- `corpus/corpus.txt` — Source text (one sentence per line)
-- `processes/markov-generator.js` — Flexible n-gram generator (word and character level)
-- `processes/degradation-cycle.js` — State machine for phase progression
+### File Structure
+```
+├── index.html                    — Fullscreen canvas + control panel
+├── config.js                     — Environment mode (test/production)
+├── main.js                       — Entry point, init, render loop
+├── corpus.js                     — CORPUS array (inlined text)
+├── lib/
+│   ├── renderer.js               — Rendering and glitch effects
+│   ├── collision.js              — Position finding, overlap detection
+│   └── tts.js                    — Speech synthesis
+└── processes/
+    ├── degradation-cycle.js      — State machine for phase progression
+    └── markov-generator.js       — Word and character level n-grams
+```
 
 ### Configuration (in main.js)
 ```js
 const CONFIG = {
-  lambda: 0.5,           // snippets per second (average)
+  // Snippet appearance
   minFontSize: 16,
   maxFontSize: 48,
-  minCharDelay: 30,      // ms between characters
-  maxCharDelay: 80,
-  holdDuration: 3,       // seconds after typing completes
+  color: 'rgba(240, 238, 235, 1)',
+  minOpacity: 0.6,
+  maxOpacity: 1.0,
+  
+  // Layout
+  lineHeightMultiplier: 1.2,
+  edgePadding: 20,
+  
+  // Typewriter timing
+  minCharDelay: 80,
+  maxCharDelay: 150,
+  
+  // Lifespan
+  holdDuration: 3,
   fadeOutDuration: 2,
-  minSnippetWords: 6,    // for word-level Markov
+  
+  // Markov snippet length
+  minSnippetWords: 6,
   maxSnippetWords: 11,
-  minSnippetChars: 20,   // for character-level Markov
+  minSnippetChars: 20,
   maxSnippetChars: 60,
 };
 ```
@@ -207,12 +228,9 @@ The text degradation now follows a one-way journey into entropy, controlled manu
 4. **Character Only** — Character order continues decreasing toward 1
 5. **Final State** — Character-level order 1, stays here forever (maximum entropy)
 
-### Files
+### State Machine
 
-- `processes/degradation-cycle.js` — State machine managing phase transitions
-- `processes/markov-generator.js` — Flexible n-gram generator (word and character level)
-- `main.js` — Integrates cycle with text generation and UI
-- `index.html` — Control panel overlay showing current phase/orders
+`processes/degradation-cycle.js` — Manages phase transitions and effect intensity scaling
 
 ### Control Panel
 
@@ -225,9 +243,9 @@ Displays:
 
 Press "Step →" to advance through the cycle. Button disables at final state.
 
-### Corpus Format
+### Corpus
 
-One sentence per line in `corpus/corpus.txt`. This format works for both verbatim extraction (whole lines) and Markov training (full text).
+Text is inlined in `corpus.js` as an array for reliability during the installation (no file loading). Format: one sentence per array element.
 
 ### Visual Entropy Effects (Implemented)
 
@@ -281,8 +299,9 @@ All effects scale with degradation phase, starting at 0 in verbatim and reaching
 2. ~~Spawn rate scaling~~ ✓
 3. ~~Visual entropy effects~~ ✓
 4. ~~Time-based auto-stepping~~ ✓
-5. **Piper integration** — Better voices, simultaneous playback
-6. **Voice degradation** — Match audio quality to text collapse stage
+5. ~~Modular code structure~~ ✓
+6. **Piper integration** — Better voices, simultaneous playback
+7. **Voice degradation** — Match audio quality to text collapse stage
 
 ---
 
@@ -310,37 +329,44 @@ MODE: 'production', // dashboard hidden, time-based auto-stepping
 
 ## Time-based Auto-stepping (Implemented)
 
-Installation runs Tuesday 9am → Saturday 6pm (~105 hours), with accelerating decay.
+Installation runs Tuesday 25 Aug → Saturday 29 Aug 2026, during gallery hours only (10am–5pm). That's 7 hours/day × 5 days = **35 total hours** of degradation.
 
 ### Configuration (in config.js)
 
 ```js
 INSTALLATION: {
-  startTime: '2026-09-01T09:00:00',  // Tuesday 9am
-  endTime: '2026-09-05T18:00:00',    // Saturday 6pm
+  startDate: '2026-08-25',  // Tuesday
+  endDate: '2026-08-29',    // Saturday
+  openHour: 10,             // 10am
+  closeHour: 17,            // 5pm
   totalSteps: 20,
-  syncInterval: 60000, // recalculate every 60 seconds
+  syncInterval: 60000,
 }
 ```
 
+### Gallery Hours Logic
+
+Degradation only progresses during gallery hours:
+- Before 10am → frozen at previous day's closing state
+- 10am–5pm → actively progressing
+- After 5pm → frozen until next day 10am
+- Outside date range → step 0 (before) or step 20 (after)
+
 ### Pacing (accelerating decay)
 
-Early steps take longer, later steps happen faster — mimics real entropy/collapse.
+Quadratic easing across 35 gallery hours. Early hours are slow, later hours accelerate.
 
-| Day | Cumulative Hours | Steps | Phase |
-|-----|------------------|-------|-------|
-| Tue | 0-10 | 0-1 | Verbatim, Word 10 |
-| Wed | 10-20 | 2-4 | Word 9-7 |
-| Thu | 20-30 | 5-8 | Word 6, Mixed begins |
-| Fri | 30-40 | 9-14 | Mixed deepens |
-| Sat | 40-50 | 15-20 | Char only → Final |
-
-### Easing function
-
-Quadratic ease-in: `progress² × totalSteps`
+| Day | Date | Gallery Hours | Cumulative | Steps | Phase |
+|-----|------|---------------|------------|-------|-------|
+| 1 | Tue 25 | 7 | 0–7 | 0–1 | Verbatim, Word 10 |
+| 2 | Wed 26 | 7 | 7–14 | 1–3 | Word 9–8 |
+| 3 | Thu 27 | 7 | 14–21 | 3–7 | Word 7–6, Mixed begins |
+| 4 | Fri 28 | 7 | 21–28 | 7–13 | Mixed deepens |
+| 5 | Sat 29 | 7 | 28–35 | 13–20 | Char only → Final |
 
 ### Edge cases
 
-- Before start time → stay at step 0 (verbatim)
-- After end time → stay at final step (maximum entropy)
-- Computer turned off overnight → catches up on next startup
+- Before Tue 25 Aug 10am → stay at step 0
+- After Sat 29 Aug 5pm → stay at step 20 (final)
+- Outside gallery hours → stay at last step reached
+- Computer restarted → recalculates from current time

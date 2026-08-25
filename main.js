@@ -264,18 +264,65 @@ function resizeCanvas() {
   }
 }
 
+function getElapsedGalleryHours(now) {
+  const { startDate, endDate, openHour, closeHour } = ENV.INSTALLATION;
+  const hoursPerDay = closeHour - openHour;
+  
+  const start = new Date(startDate);
+  const end = new Date(endDate);
+  const current = new Date(now);
+  
+  // Set to start of day for date comparisons
+  const currentDateOnly = new Date(current.getFullYear(), current.getMonth(), current.getDate());
+  const startDateOnly = new Date(start.getFullYear(), start.getMonth(), start.getDate());
+  const endDateOnly = new Date(end.getFullYear(), end.getMonth(), end.getDate());
+  
+  // Before installation starts
+  if (currentDateOnly < startDateOnly) return 0;
+  
+  // After installation ends
+  if (currentDateOnly > endDateOnly) {
+    const totalDays = Math.round((endDateOnly - startDateOnly) / (1000 * 60 * 60 * 24)) + 1;
+    return totalDays * hoursPerDay;
+  }
+  
+  // Count full days elapsed
+  const fullDaysElapsed = Math.round((currentDateOnly - startDateOnly) / (1000 * 60 * 60 * 24));
+  let elapsed = fullDaysElapsed * hoursPerDay;
+  
+  // Add hours from today
+  const currentHour = current.getHours() + current.getMinutes() / 60;
+  
+  if (currentHour < openHour) {
+    // Before gallery opens today — no additional hours
+  } else if (currentHour >= closeHour) {
+    // After gallery closes today — add full day
+    elapsed += hoursPerDay;
+  } else {
+    // During gallery hours — add partial day
+    elapsed += currentHour - openHour;
+  }
+  
+  return elapsed;
+}
+
 function getStepAtTime(now) {
-  const start = new Date(ENV.INSTALLATION.startTime).getTime();
-  const end = new Date(ENV.INSTALLATION.endTime).getTime();
-  const totalDuration = end - start;
-  const elapsed = now - start;
-
+  const { openHour, closeHour, startDate, endDate, totalSteps } = ENV.INSTALLATION;
+  const hoursPerDay = closeHour - openHour;
+  
+  const start = new Date(startDate);
+  const end = new Date(endDate);
+  const totalDays = Math.round((new Date(end) - new Date(start)) / (1000 * 60 * 60 * 24)) + 1;
+  const totalHours = totalDays * hoursPerDay;
+  
+  const elapsed = getElapsedGalleryHours(now);
+  
   if (elapsed <= 0) return 0;
-  if (elapsed >= totalDuration) return ENV.INSTALLATION.totalSteps;
+  if (elapsed >= totalHours) return totalSteps;
 
-  const progress = elapsed / totalDuration;
+  const progress = elapsed / totalHours;
   const easedProgress = progress * progress; // quadratic ease-in
-  return Math.floor(easedProgress * ENV.INSTALLATION.totalSteps);
+  return Math.floor(easedProgress * totalSteps);
 }
 
 function syncStep() {
