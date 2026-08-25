@@ -19,10 +19,119 @@
       canvas {
         display: block;
       }
+      
+      /* Control Panel */
+      #controls {
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        background: rgba(0, 0, 0, 0.85);
+        border: 1px solid rgba(255, 255, 255, 0.3);
+        border-radius: 8px;
+        padding: 20px;
+        color: #fff;
+        font-family: 'SF Mono', Monaco, 'Courier New', monospace;
+        font-size: 14px;
+        min-width: 280px;
+        z-index: 1000;
+      }
+      
+      #controls h2 {
+        margin: 0 0 15px 0;
+        font-size: 16px;
+        font-weight: 600;
+        color: rgba(255, 255, 255, 0.9);
+        border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+        padding-bottom: 10px;
+      }
+      
+      .status-row {
+        display: flex;
+        justify-content: space-between;
+        margin-bottom: 8px;
+      }
+      
+      .status-label {
+        color: rgba(255, 255, 255, 0.6);
+      }
+      
+      .status-value {
+        color: #4fc3f7;
+        font-weight: 500;
+      }
+      
+      #description {
+        display: block;
+        margin: 15px 0;
+        padding: 10px;
+        background: rgba(255, 255, 255, 0.1);
+        border-radius: 4px;
+        font-size: 12px;
+        color: rgba(255, 255, 255, 0.8);
+        line-height: 1.4;
+      }
+      
+      #step-btn {
+        width: 100%;
+        padding: 12px 20px;
+        margin-top: 10px;
+        background: #4fc3f7;
+        color: #000;
+        border: none;
+        border-radius: 4px;
+        font-family: inherit;
+        font-size: 14px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: background 0.2s, transform 0.1s;
+      }
+      
+      #step-btn:hover:not(:disabled) {
+        background: #81d4fa;
+      }
+      
+      #step-btn:active:not(:disabled) {
+        transform: scale(0.98);
+      }
+      
+      #step-btn:disabled {
+        background: rgba(255, 255, 255, 0.2);
+        color: rgba(255, 255, 255, 0.5);
+        cursor: not-allowed;
+      }
     </style>
   </head>
   <body>
     <canvas id="canvas"></canvas>
-    <script src="main.js"></script>
+    
+    <div id="controls">
+      <h2>Degradation Cycle</h2>
+      
+      <div class="status-row">
+        <span class="status-label">Phase:</span>
+        <span class="status-value" id="phase">verbatim</span>
+      </div>
+      
+      <div class="status-row">
+        <span class="status-label">Word Order:</span>
+        <span class="status-value" id="word-order">10</span>
+      </div>
+      
+      <div class="status-row">
+        <span class="status-label">Char Order:</span>
+        <span class="status-value" id="char-order">10</span>
+      </div>
+      
+      <div class="status-row">
+        <span class="status-label">Char Active:</span>
+        <span class="status-value" id="char-active">No</span>
+      </div>
+      
+      <span id="description">Verbatim (exact corpus lines)</span>
+      
+      <button id="step-btn">Step →</button>
+    </div>
+    
+    <script type="module" src="main.js"></script>
   </body>
 </html>

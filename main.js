@@ -3,7 +3,29 @@
  * 
  * Snippets of text appear at random positions and type out character by character,
  * scheduled via a Poisson process.
+ * 
+ * Degradation cycle: verbatim → word markov → mixed → char only → final
  */
+
+import MarkovGenerator from './processes/markov-generator.js';
+import { DegradationCycle } from './processes/degradation-cycle.js';
+
+// --- Font Pool ---
+const FONTS = [
+  // Monospace (machine/terminal)
+  'Courier New, monospace',
+  'Monaco, monospace',
+  'SF Mono, monospace',
+  // Sans-serif (clinical/neutral)
+  'Helvetica, Arial, sans-serif',
+  'SF Pro, system-ui, sans-serif',
+  'Inter, sans-serif',
+  'Roboto, sans-serif',
+  // Serif (human/literary)
+  'Georgia, serif',
+  'Times New Roman, serif',
+  'Palatino, serif',
+];
 
 // --- Configuration ---
 const CONFIG = {
@@ -13,7 +35,6 @@ const CONFIG = {
   // Snippet appearance
   minFontSize: 16,
   maxFontSize: 48,
-  fontFamily: 'system-ui, -apple-system, sans-serif',
   color: 'rgba(255, 255, 255, 0.9)',
   
   // Typewriter timing
@@ -24,68 +45,109 @@ const CONFIG = {
   holdDuration: 3,      // seconds to stay visible after typing completes
   fadeOutDuration: 2,   // seconds
   
-  // Snippet extraction
-  minSnippetWords: 3,
-  maxSnippetWords: 12,
+  // Snippet length (for Markov generation)
+  minSnippetWords: 6,
+  maxSnippetWords: 11,
+  minSnippetChars: 20,
+  maxSnippetChars: 60,
 };
 
 // --- State ---
 let canvas, ctx;
 let snippets = [];       // active text fragments on screen
-let corpusSnippets = []; // pre-extracted snippets from corpus
+let corpusLines = [];    // raw lines from corpus (for verbatim mode)
 let lastTime = 0;
 let nextSpawnTime = 0;
+let voices = [];         // available TTS voices
+
+// Degradation system
+const markov = new MarkovGenerator();
+const cycle = new DegradationCycle();
+
+// --- TTS Setup ---
+function loadVoices() {
+  const allVoices = speechSynthesis.getVoices();
+  // Filter to English voices only
+  voices = allVoices.filter(v => v.lang.startsWith('en'));
+  console.log(`Loaded ${voices.length} English TTS voices (of ${allVoices.length} total)`);
+}
+
+// Voices load asynchronously in some browsers
+speechSynthesis.onvoiceschanged = loadVoices;
+loadVoices();
+
+function speak(text) {
+  if (voices.length === 0) return;
+  
+  const utterance = new SpeechSynthesisUtterance(text);
+  utterance.voice = voices[Math.floor(Math.random() * voices.length)];
+  utterance.rate = 0.8 + Math.random() * 0.4; // 0.8 - 1.2
+  utterance.pitch = 0.8 + Math.random() * 0.4;
+  
+  speechSynthesis.speak(utterance);
+}
 
 // --- Corpus Loading ---
 async function loadCorpus() {
   try {
     const response = await fetch('./corpus/corpus.txt');
     const text = await response.text();
-    corpusSnippets = extractSnippets(text);
-    console.log(`Loaded ${corpusSnippets.length} snippets from corpus`);
+    
+    // Store raw lines for verbatim mode
+    corpusLines = text.split('\n').filter(line => line.trim().length > 0);
+    
+    // Train Markov generator on full corpus
+    markov.train(text);
+    
+    console.log(`Loaded ${corpusLines.length} lines from corpus`);
   } catch (err) {
     console.error('Failed to load corpus:', err);
     // Fallback snippets for testing
-    corpusSnippets = [
+    corpusLines = [
       'the machine remembers everything',
       'what remains of human intent',
       'digital persistence',
       'slowly decays into noise',
       'processed by a machine',
     ];
+    markov.train(corpusLines.join('\n'));
   }
 }
 
-function extractSnippets(text) {
-  // Split into sentences, then into chunks of varying length
-  const sentences = text
-    .replace(/\n+/g, ' ')
-    .split(/(?<=[.!?])\s+/)
-    .filter(s => s.trim().length > 0);
+// --- Text Generation ---
+function generateText() {
+  const params = cycle.getGenerationParams();
   
-  const snippets = [];
-  
-  for (const sentence of sentences) {
-    const words = sentence.split(/\s+/).filter(w => w.length > 0);
+  switch (params.mode) {
+    case 'verbatim':
+      // Return a random line from the corpus
+      return corpusLines[Math.floor(Math.random() * corpusLines.length)];
     
-    if (words.length <= CONFIG.maxSnippetWords) {
-      snippets.push(sentence.trim());
-    } else {
-      // Break long sentences into chunks
-      let i = 0;
-      while (i < words.length) {
-        const chunkSize = CONFIG.minSnippetWords + 
-          Math.floor(Math.random() * (CONFIG.maxSnippetWords - CONFIG.minSnippetWords));
-        const chunk = words.slice(i, i + chunkSize).join(' ');
-        if (chunk.length > 0) {
-          snippets.push(chunk);
-        }
-        i += chunkSize;
-      }
+    case 'word': {
+      // Generate word-level Markov text
+      const length = CONFIG.minSnippetWords + 
+        Math.floor(Math.random() * (CONFIG.maxSnippetWords - CONFIG.minSnippetWords + 1));
+      return markov.generate({
+        length,
+        mode: 'word',
+        order: params.wordOrder,
+      });
     }
+    
+    case 'char': {
+      // Generate character-level Markov text
+      const length = CONFIG.minSnippetChars + 
+        Math.floor(Math.random() * (CONFIG.maxSnippetChars - CONFIG.minSnippetChars + 1));
+      return markov.generate({
+        length,
+        mode: 'char',
+        order: params.charOrder,
+      });
+    }
+    
+    default:
+      return 'ERROR: unknown mode';
   }
-  
-  return snippets;
 }
 
 // --- Poisson Scheduling ---
@@ -96,14 +158,15 @@ function getNextPoissonDelay() {
 
 // --- Snippet Factory ---
 function spawnSnippet() {
-  if (corpusSnippets.length === 0) return;
+  if (corpusLines.length === 0) return;
   
-  const text = corpusSnippets[Math.floor(Math.random() * corpusSnippets.length)];
+  const text = generateText();
   const fontSize = CONFIG.minFontSize + 
     Math.random() * (CONFIG.maxFontSize - CONFIG.minFontSize);
+  const fontFamily = FONTS[Math.floor(Math.random() * FONTS.length)];
   
   // Measure text width to avoid spawning too close to right edge
-  ctx.font = `${fontSize}px ${CONFIG.fontFamily}`;
+  ctx.font = `${fontSize}px ${fontFamily}`;
   const textWidth = ctx.measureText(text).width;
   
   // Random position (avoid edges, account for text width)
@@ -121,6 +184,7 @@ function spawnSnippet() {
     x,
     y,
     fontSize,
+    fontFamily,
     charDelay,
     visibleChars: 0,
     timeSinceLastChar: 0,
@@ -129,6 +193,34 @@ function spawnSnippet() {
     opacity: 1,
     state: 'typing', // 'typing', 'holding', 'fading'
   });
+  
+  // Speak the snippet
+  speak(text);
+}
+
+// --- UI Update ---
+function updateUI() {
+  const state = cycle.getState();
+  
+  document.getElementById('phase').textContent = state.phase;
+  document.getElementById('description').textContent = state.description;
+  document.getElementById('word-order').textContent = state.wordOrder;
+  document.getElementById('char-order').textContent = state.charOrder;
+  document.getElementById('char-active').textContent = state.charModeActive ? 'Yes' : 'No';
+  
+  // Disable button at final state
+  const stepBtn = document.getElementById('step-btn');
+  if (cycle.isFinal()) {
+    stepBtn.disabled = true;
+    stepBtn.textContent = 'Final State Reached';
+  }
+}
+
+// --- Step Handler ---
+function handleStep() {
+  cycle.step();
+  updateUI();
+  console.log('Stepped to:', cycle.getState());
 }
 
 // --- Rendering ---
@@ -178,7 +270,7 @@ function updateAndRender(timestamp) {
     
     // Render visible portion of text
     const visibleText = s.text.slice(0, s.visibleChars);
-    ctx.font = `${s.fontSize}px ${CONFIG.fontFamily}`;
+    ctx.font = `${s.fontSize}px ${s.fontFamily}`;
     ctx.fillStyle = CONFIG.color.replace(/[\d.]+\)$/, `${s.opacity})`);
     ctx.fillText(visibleText, s.x, s.y);
   }
@@ -199,7 +291,13 @@ async function init() {
   resizeCanvas();
   window.addEventListener('resize', resizeCanvas);
   
+  // Setup step button
+  document.getElementById('step-btn').addEventListener('click', handleStep);
+  
   await loadCorpus();
+  
+  // Initial UI state
+  updateUI();
   
   // Start the render loop
   nextSpawnTime = performance.now() + getNextPoissonDelay();
