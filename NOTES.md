@@ -261,42 +261,66 @@ All effects scale with degradation phase, starting at 0 in verbatim and reaching
 
 ## Planned Features
 
-### LFO on Spawn Rate (Implemented)
+### Spawn Rate Scaling
 
-Rather than a constant λ, spawn rate is modulated with a low-frequency oscillator for organic breathing rhythm.
+λ (spawn rate) increases with degradation phase — fewer snippets early, more towards the end.
 
-| LFO Parameter | Early Phases | Late Phases |
-|---------------|--------------|-------------|
-| Base λ | 0.3 | 1.5 |
-| Amplitude | ±0.1 (subtle) | ±0.5 (dramatic swings) |
-| Frequency | Slow (0.02 Hz, ~50s cycle) | Faster (0.1 Hz, ~10s cycle) |
-| Waveform | Sine | Sine |
+| Phase | λ | Avg interval |
+|-------|---|--------------|
+| Verbatim | 0.25 | ~4s |
+| Word 10→6 | 0.3→0.5 | ~3.3→2s |
+| Mixed | 0.6→0.9 | ~1.7→1.1s |
+| Char only | 1.0→1.3 | ~1→0.8s |
+| Final | 1.5 | ~0.7s |
 
 ---
 
 ## Next Steps
 
 1. ~~Integrate Markov generator~~ ✓
-2. ~~LFO spawn rate~~ ✓
+2. ~~Spawn rate scaling~~ ✓
 3. ~~Visual entropy effects~~ ✓
-4. **Implement time-based auto-stepping** (see plan below)
+4. ~~Time-based auto-stepping~~ ✓
 5. **Piper integration** — Better voices, simultaneous playback
 6. **Voice degradation** — Match audio quality to text collapse stage
 
 ---
 
-## Time-based Auto-stepping (Planned)
+## Environment Modes
+
+Edit `config.js` to switch between modes:
+
+```js
+MODE: 'test',       // dashboard visible, manual stepping
+MODE: 'production', // dashboard hidden, time-based auto-stepping
+```
+
+### Test Mode
+- Control panel visible in top-right
+- Click "Step →" to advance through degradation cycle
+- All effect values displayed in real-time
+
+### Production Mode
+- Control panel hidden
+- Automatically calculates current step based on time
+- Syncs every 60 seconds to stay on schedule
+- Survives restarts (recalculates from installation start time)
+
+---
+
+## Time-based Auto-stepping (Implemented)
 
 Installation runs Tuesday 9am → Saturday 6pm (~105 hours), with accelerating decay.
 
-### Configuration
+### Configuration (in config.js)
 
 ```js
-const INSTALLATION = {
+INSTALLATION: {
   startTime: '2026-09-01T09:00:00',  // Tuesday 9am
   endTime: '2026-09-05T18:00:00',    // Saturday 6pm
   totalSteps: 20,
-};
+  syncInterval: 60000, // recalculate every 60 seconds
+}
 ```
 
 ### Pacing (accelerating decay)
@@ -313,31 +337,10 @@ Early steps take longer, later steps happen faster — mimics real entropy/colla
 
 ### Easing function
 
-```js
-// Quadratic ease-in: slow start, fast end
-function getStepAtTime(elapsed, totalDuration, totalSteps) {
-  const progress = Math.min(1, elapsed / totalDuration);
-  const easedProgress = progress * progress; // quadratic
-  return Math.floor(easedProgress * totalSteps);
-}
-```
-
-### Startup logic
-
-1. Calculate elapsed time since `startTime`
-2. Apply easing function to get current step
-3. Call `cycle.jumpToStep(n)` to catch up
-4. Continue rendering from there
-5. Recalculate periodically (every minute) to stay in sync
+Quadratic ease-in: `progress² × totalSteps`
 
 ### Edge cases
 
 - Before start time → stay at step 0 (verbatim)
 - After end time → stay at final step (maximum entropy)
 - Computer turned off overnight → catches up on next startup
-
-### Files to modify
-
-- `processes/degradation-cycle.js` — add `jumpToStep(n)` method
-- `main.js` — add installation config, calculate step on init
-- Keep manual button for testing (hide in production?)

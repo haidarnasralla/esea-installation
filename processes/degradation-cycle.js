@@ -151,6 +151,18 @@ class DegradationCycle {
   }
 
   /**
+   * Jump to a specific step number (for time-based auto-stepping)
+   * @param {number} targetStep - Step to jump to (0-20)
+   */
+  jumpToStep(targetStep) {
+    this.reset();
+    const steps = Math.min(targetStep, 20);
+    for (let i = 0; i < steps; i++) {
+      this.step();
+    }
+  }
+
+  /**
    * Check if we've reached the final state
    */
   isFinal() {
@@ -210,83 +222,29 @@ class DegradationCycle {
     }
   }
 
-  // --- LFO Spawn Rate ---
+  // --- Spawn Rate ---
 
   /**
-   * Get base lambda (spawn rate) for current phase
+   * Get lambda (spawn rate) for current phase
    */
-  getBaseLambda() {
+  getLambda() {
     switch (this.phase) {
       case PHASES.VERBATIM:
-        return 0.3;
+        return 0.25;
       case PHASES.WORD_MARKOV:
-        // 0.4 at order 10, up to 0.6 at order 6
-        return 0.4 + (10 - this.wordOrder) * 0.05;
+        // 0.3 at order 10, up to 0.5 at order 6
+        return 0.3 + (10 - this.wordOrder) * 0.05;
       case PHASES.MIXED:
-        // 0.7 at word order 5, up to 1.0 at word order 1
-        return 0.7 + (5 - this.wordOrder) * 0.075;
+        // 0.6 at word order 5, up to 0.9 at word order 1
+        return 0.6 + (5 - this.wordOrder) * 0.075;
       case PHASES.CHAR_ONLY:
-        // 1.0 at order 10, up to 1.5 at order 1
-        return 1.0 + (10 - this.charOrder) * 0.055;
+        // 1.0 at order 10, up to 1.3 at order 1
+        return 1.0 + (10 - this.charOrder) * 0.033;
       case PHASES.FINAL:
         return 1.5;
       default:
-        return 0.3;
+        return 0.25;
     }
-  }
-
-  /**
-   * Get LFO amplitude (how much lambda varies)
-   */
-  getLfoAmplitude() {
-    switch (this.phase) {
-      case PHASES.VERBATIM:
-        return 0.1;
-      case PHASES.WORD_MARKOV:
-        return 0.15 + (10 - this.wordOrder) * 0.02;
-      case PHASES.MIXED:
-        return 0.25 + (5 - this.wordOrder) * 0.05;
-      case PHASES.CHAR_ONLY:
-        return 0.4 + (10 - this.charOrder) * 0.01;
-      case PHASES.FINAL:
-        return 0.5;
-      default:
-        return 0.1;
-    }
-  }
-
-  /**
-   * Get LFO frequency in Hz (cycles per second)
-   */
-  getLfoFrequency() {
-    switch (this.phase) {
-      case PHASES.VERBATIM:
-        return 0.02; // ~50s cycle
-      case PHASES.WORD_MARKOV:
-        return 0.025 + (10 - this.wordOrder) * 0.005;
-      case PHASES.MIXED:
-        return 0.05 + (5 - this.wordOrder) * 0.01;
-      case PHASES.CHAR_ONLY:
-        return 0.08 + (10 - this.charOrder) * 0.002;
-      case PHASES.FINAL:
-        return 0.1; // ~10s cycle
-      default:
-        return 0.02;
-    }
-  }
-
-  /**
-   * Get current lambda with LFO modulation applied
-   * @param {number} time - Current time in seconds
-   */
-  getLambda(time) {
-    const base = this.getBaseLambda();
-    const amplitude = this.getLfoAmplitude();
-    const frequency = this.getLfoFrequency();
-    
-    const lfo = Math.sin(time * frequency * Math.PI * 2);
-    // Ensure lambda never goes below 0.1
-    return Math.max(0.1, base + lfo * amplitude);
   }
 
   // --- Visual Entropy Effects ---
