@@ -1,0 +1,6 @@
+[Unit]
+Description=Restart installation server and refresh kiosk browser
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/refresh-installation.sh

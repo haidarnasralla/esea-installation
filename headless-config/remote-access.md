@@ -1,3 +1,5 @@
+sudo bash headless-config/setup.sh
+
 # ESEA Installation Remote Access Runbook
 
 ## Connection Details
@@ -24,7 +26,7 @@ The installation runs a kiosk display using:
 
 - **Web server**: Python HTTP server on port 3000, managed by systemd
 - **Display**: Chromium in kiosk mode, auto-started on login
-- **Auto-refresh**: Systemd timer restarts the server and refreshes the browser at 09:30, 12:00, and 17:00 daily
+- **Auto-refresh**: Systemd timer restarts the server and refreshes the browser at 09:30, 13:00, and 17:00 daily
 
 ## Health Checks
 
@@ -79,7 +81,7 @@ sudo systemctl start installation-refresh.service
 
 This runs the refresh script manually, which:
 1. Restarts the web server
-2. Sends F5 to the Chromium kiosk browser
+2. Sends Ctrl+Shift+R (hard refresh) to the Chromium kiosk browser
 
 ### Restart Chromium Kiosk
 
@@ -92,7 +94,8 @@ pkill chromium
 # Restart it in the user's X session
 runuser -u haidarnasralla -- env DISPLAY=:0 XAUTHORITY=/home/haidarnasralla/.Xauthority \
   chromium --kiosk --autoplay-policy=no-user-gesture-required --disable-infobars \
-  --noerrdialogs --disable-session-crashed-bubble --disable-translate http://localhost:3000/
+  --noerrdialogs --disable-session-crashed-bubble --disable-translate \
+  --no-first-run --no-default-browser-check --disable-restore-session-state http://localhost:3000/
 ```
 
 Or simply reboot the machine:
@@ -108,7 +111,7 @@ sudo reboot
 | `/etc/systemd/system/installation-server.service` | Web server service unit |
 | `/etc/systemd/system/installation-refresh.service` | Refresh oneshot service |
 | `/etc/systemd/system/installation-refresh.timer` | Scheduled refresh timer |
-| `/usr/local/bin/refresh-installation.sh` | Refresh script (restarts server + sends F5) |
+| `/usr/local/bin/refresh-installation.sh` | Refresh script (restarts server + hard refresh) |
 | `~/.config/autostart/installation.desktop` | Chromium kiosk autostart |
 
 ## Logs
@@ -130,6 +133,22 @@ journalctl -u installation-refresh.service --since today
 | 404 errors in logs | Missing files in served directory | Check content in the web root |
 | Server not starting | Python or port issue | Check `journalctl -u installation-server` for errors |
 
+### Debugging Failed Services
+
+If services aren't running after setup:
+
+```bash
+# See why the server failed
+journalctl -u installation-server.service -n 50
+
+# See why the timer failed
+journalctl -u installation-refresh.timer -n 50
+
+# Check service file syntax
+systemd-analyze verify /etc/systemd/system/installation-server.service
+systemd-analyze verify /etc/systemd/system/installation-refresh.service
+```
+
 ## Technical Notes
 
 ### Installation Content
@@ -143,13 +162,14 @@ All state is client-side. No server-side state or databases.
 
 ### Refresh Behavior
 
-F5 refresh fully resets the installation:
+Hard refresh (Ctrl+Shift+R) fully resets the installation:
+- Bypasses browser cache
 - Reloads HTML/JS from disk
 - Restarts animation from beginning
 - Resets degradation cycle
 - Re-initializes audio/TTS
 
-The 3x daily scheduled refresh (09:30, 12:00, 17:00) prevents the installation from running too long without a clean reset.
+The 3x daily scheduled refresh (09:30, 13:00, 17:00) prevents the installation from running too long without a clean reset.
 
 ### Display Stack
 
@@ -166,6 +186,30 @@ If the machine prompts for login on boot, enable auto-login by creating `/etc/sd
 User=haidarnasralla
 Session=plasmax11
 ```
+
+### Power Management (Prevent Sleep/Suspend)
+
+The kiosk must not sleep or suspend. Add these settings to `/etc/systemd/logind.conf`:
+
+```ini
+HandleLidSwitch=ignore
+HandleLidSwitchExternalPower=ignore
+HandleLidSwitchDocked=ignore
+HandleSuspendKey=ignore
+HandleHibernateKey=ignore
+```
+
+Then restart logind:
+```bash
+sudo systemctl restart systemd-logind
+```
+
+Verify sleep targets are inactive:
+```bash
+systemctl status sleep.target suspend.target hibernate.target hybrid-sleep.target
+```
+
+All should show `inactive (dead)`.
 
 ### Disable Unnecessary Startup Apps
 
@@ -221,7 +265,7 @@ Install and setup (one-time):
 ```bash
 sudo apt install x11vnc
 mkdir -p ~/.vnc
-x11vnc -storepasswd RoastedPenguin66! ~/.vnc/passwd
+x11vnc -storepasswd 'RoastedPenguin66!' ~/.vnc/passwd
 ```
 
 Start from SSH session (full control—mouse and keyboard):

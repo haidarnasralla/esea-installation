@@ -1,0 +1,11 @@
+[Unit]
+Description=Run installation refresh at 09:30, 13:00 and 17:00 daily
+
+[Timer]
+OnCalendar=*-*-* 09:30:00
+OnCalendar=*-*-* 13:00:00
+OnCalendar=*-*-* 17:00:00
+Persistent=false
+
+[Install]
+WantedBy=timers.target

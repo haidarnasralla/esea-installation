@@ -1,0 +1,12 @@
+[Unit]
+Description=ESEA Installation Web Server
+After=network.target
+
+[Service]
+User=haidarnasralla
+WorkingDirectory=/home/haidarnasralla/Documents/esea-installation
+ExecStart=/usr/bin/python3 -m http.server 3000
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target

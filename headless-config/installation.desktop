@@ -1,0 +1,5 @@
+[Desktop Entry]
+Type=Application
+Name=Installation
+Exec=chromium --kiosk --autoplay-policy=no-user-gesture-required --disable-infobars --noerrdialogs --disable-session-crashed-bubble --disable-translate --no-first-run --no-default-browser-check --disable-restore-session-state http://localhost:3000/
+X-KDE-autostart-after=panel
