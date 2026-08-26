@@ -408,8 +408,8 @@ function getStepAtTime(now) {
   const elapsed = current - start;
   const progress = elapsed / totalDuration;
   
-  // Quadratic ease-in for accelerating decay
-  const easedProgress = progress * progress;
+  // Less aggressive quadratic ease-in (blend of linear and quadratic)
+  const easedProgress = progress * (0.5 + 0.5 * progress);
   return Math.floor(easedProgress * totalSteps);
 }
 
@@ -420,6 +420,9 @@ function syncStep() {
   if (targetStep !== currentStep) {
     cycle.jumpToStep(targetStep);
   }
+  
+  const state = cycle.getState();
+  console.log(`[Step ${cycle.getStepCount()}/20] ${state.phase}: ${state.description}`);
 }
 
 function init() {

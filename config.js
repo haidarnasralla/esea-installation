@@ -7,7 +7,7 @@
  */
 
 export default {
-  MODE: 'test', // ← change to 'production' for installation
+  MODE: 'production', // ← change to 'production' for installation
   
   // TTS Engine Selection
   // - 'hybrid': LPC voices (Daniel/Samantha/Whisper) with SAM fallback (default)
