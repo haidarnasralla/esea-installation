@@ -164,7 +164,42 @@ If the machine prompts for login on boot, enable auto-login by creating `/etc/sd
 ```ini
 [Autologin]
 User=haidarnasralla
-Session=plasma
+Session=plasmax11
+```
+
+### Disable Unnecessary Startup Apps
+
+For a cleaner kiosk startup, disable services that aren't needed:
+
+```bash
+mkdir -p ~/.config/autostart
+
+# Disable KDE Wallet prompt
+echo -e '[Desktop Entry]\nHidden=true' > ~/.config/autostart/pam_kwallet_init.desktop
+
+# Disable Baloo file indexer (wastes resources)
+kwriteconfig5 --file baloofilerc --group 'Basic Settings' --key 'Indexing-Enabled' 'false'
+
+# Disable KDE Connect
+echo -e '[Desktop Entry]\nHidden=true' > ~/.config/autostart/org.kde.kdeconnect.daemon.desktop
+
+# Disable software update notifier
+echo -e '[Desktop Entry]\nHidden=true' > ~/.config/autostart/org.kde.discover.notifier.desktop
+
+# Disable calendar reminders
+echo -e '[Desktop Entry]\nHidden=true' > ~/.config/autostart/org.kde.kalendarac.desktop
+
+# Disable Wayland video bridge (not needed on X11)
+echo -e '[Desktop Entry]\nHidden=true' > ~/.config/autostart/org.kde.xwaylandvideobridge.desktop
+
+# Disable accessibility screen reader
+echo -e '[Desktop Entry]\nHidden=true' > ~/.config/autostart/orca-autostart.desktop
+
+# Disable print applet
+echo -e '[Desktop Entry]\nHidden=true' > ~/.config/autostart/print-applet.desktop
+
+# Disable backup daemon
+echo -e '[Desktop Entry]\nHidden=true' > ~/.config/autostart/kup-daemon.desktop
 ```
 
 ### Chromium Kiosk Flags
@@ -182,15 +217,24 @@ Key flags:
 
 ### Remote Viewing with x11vnc
 
-Install (one-time):
+Install and setup (one-time):
 ```bash
 sudo apt install x11vnc
+mkdir -p ~/.vnc
+x11vnc -storepasswd RoastedPenguin66! ~/.vnc/passwd
 ```
 
-Start from SSH session:
+Start from SSH session (full control—mouse and keyboard):
 ```bash
-x11vnc -display :0 -auth /home/haidarnasralla/.Xauthority -forever -localhost -passwd YOUR_PASSWORD
+x11vnc -display :0 -auth /home/haidarnasralla/.Xauthority -forever -localhost -rfbauth ~/.vnc/passwd
 ```
+
+Or view-only mode (no interaction, just monitoring):
+```bash
+x11vnc -display :0 -auth /home/haidarnasralla/.Xauthority -forever -localhost -rfbauth ~/.vnc/passwd -viewonly
+```
+
+VNC password: `RoastedPenguin66!`
 
 The `-localhost` flag restricts connections to localhost only (more secure).
 
